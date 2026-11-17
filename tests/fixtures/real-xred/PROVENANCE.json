@@ -1,0 +1,29 @@
+{
+  "purpose": "CatPlot 阶段4 独立真实已知物相验证（验收项 D）：真实实验谱图 → 上传解析 → SNIP 背景 → 自动寻峰 → 峰表匹配 → 多物相核对",
+  "dataset": {
+    "name": "XRED — X-Ray phase Identification public Experimental Dataset",
+    "repository": "https://github.com/WPEM/XRED",
+    "path": "biphase/TiO2Rutile Anatase/data.csv",
+    "license": "MIT",
+    "fileGitSha": "47c11492a296c777467c26194f9f2ac9ed4aeb7a",
+    "downloadedAt": "2026-11-17",
+    "downloadMethod": "GitHub contents API (base64)，原始文件未改动",
+    "companionCifs": [
+      { "file": "1010942.cif", "gitSha": "4e38ef84fbaaf8c104050682ce03e004254ee284", "note": "COD 1010942（数据集随附结构文件）" },
+      { "file": "1530150.cif", "gitSha": "5bee3695c4bf26ab0d33fc2482da5dd360b47132", "note": "COD 1530150（数据集随附结构文件）" }
+    ],
+    "knownPhases": ["Anatase TiO2（锐钛矿）", "Rutile TiO2（金红石）"],
+    "measurement": {
+      "points": 2501,
+      "range2theta": [10, 60],
+      "step": 0.02,
+      "wavelengthAssumed": 1.5406,
+      "wavelengthBasis": "数据文件未附波长元数据；最强峰 25.22°/27.42°/48.04° 与锐钛矿(101)/(200)、金红石(110) 的 Cu Kα 位置一致，推断为 Cu Kα（λ=1.5406 Å）。此为推断，非数据集声明。"
+    },
+    "notes": [
+      "双相混合物实验谱图，非单标样；锐钛矿为主相（25.22° 最强），金红石为次相（27.42°）。",
+      "RRUFF 刚玉谱图原为首选，但 rruff.net 人机验证拒绝自动化访问（403/挑战页），故改用 MIT 许可的 XRED 公开实验数据。",
+      "峰位存在约 -0.06° 量级样品位移偏差，属真实实验常见现象。"
+    ]
+  }
+}

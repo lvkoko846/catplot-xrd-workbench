@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CatPlot · XRD 分析工作台</title>
+<meta name="description" content="面向催化方向研究生的 XRD 分析工作台：本地导入、背景扣除、寻峰、参考卡片轨道对比、峰表导出与项目保存。数据仅存于本机浏览器。">
+<link rel="stylesheet" href="css/styles.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d1321'/%3E%3Cpath d='M4 26 L9 24 L12 10 L15 24 L18 18 L21 6 L24 24 L28 22' fill='none' stroke='%2338bdf8' stroke-width='2.4' stroke-linejoin='round'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-logo" viewBox="0 0 32 32" aria-hidden="true">
+      <rect width="32" height="32" rx="7" fill="var(--site-surface)"/>
+      <path d="M4 26 L9 24 L12 10 L15 24 L18 18 L21 6 L24 24 L28 22" fill="none" stroke="var(--site-accent)" stroke-width="2.4" stroke-linejoin="round"/>
+      <circle cx="21" cy="6" r="2.4" fill="var(--amber)"/>
+    </svg>
+    <div class="brand-text">
+      <h1>CatPlot</h1>
+      <span>XRD 分析工作台 · 本地处理</span>
+    </div>
+  </div>
+
+  <div class="tb-group" role="group" aria-label="文件">
+    <button id="btnUploadTop" class="btn primary small" type="button">导入数据</button>
+    <button id="btnSampleTop" class="btn ghost small" type="button" title="程序生成的模拟数据，仅供演示">模拟示例</button>
+    <button id="btnExportProject" class="btn ghost small" type="button" title="导出项目 JSON（v2，含背景/峰表/历史/物相）">保存项目</button>
+    <button id="btnRestoreProject" class="btn ghost small" type="button">恢复项目</button>
+    <input type="file" id="fileInput" accept=".csv,.txt,.tsv,.dat,text/csv,text/plain" multiple hidden>
+    <input type="file" id="projectInput" accept=".json,application/json" hidden>
+  </div>
+
+  <div class="tb-group" role="group" aria-label="撤销重做">
+    <button id="btnUndo" class="btn ghost small" type="button" title="撤销 (Ctrl+Z)" disabled>↩ 撤销</button>
+    <button id="btnRedo" class="btn ghost small" type="button" title="重做 (Ctrl+Shift+Z)" disabled>↪ 重做</button>
+  </div>
+
+  <nav class="tool-tabs" role="tablist" aria-label="分析工具">
+    <button class="tool-tab active" data-tool="display" role="tab" aria-selected="true" type="button">显示</button>
+    <button class="tool-tab" data-tool="bg" role="tab" aria-selected="false" type="button">背景</button>
+    <button class="tool-tab" data-tool="peaks" role="tab" aria-selected="false" type="button">寻峰</button>
+    <button class="tool-tab" data-tool="fit" role="tab" aria-selected="false" type="button">峰拟合</button>
+  </nav>
+
+  <div class="tb-group" role="group" aria-label="卡片库与导出">
+    <button id="btnCards" class="btn ghost small" type="button" title="公开示例参考卡（CC0/MIT，离线内置）">示例参考卡</button>
+    <select id="exportScope" class="input tiny-select" aria-label="导出范围" title="导出范围">
+      <option value="visible">可见样品</option>
+      <option value="all">全部样品</option>
+    </select>
+    <button id="btnPng" class="btn small" type="button" title="全量显示层数据，尺寸与视口无关">PNG</button>
+    <button id="btnSvg" class="btn small" type="button">SVG</button>
+    <button id="btnCsv" class="btn small" type="button" title="原始/分析/显示三层数据，全精度">CSV</button>
+  </div>
+  <span id="saveState" class="save-state pending" aria-live="polite">● 正在初始化…</span>
+</header>
+
+<main class="layout workbench">
+
+  <!-- 左：样品与处理历史 -->
+  <aside class="panel samples-panel" aria-label="样品与处理历史">
+    <div class="panel-head">
+      <h2>样品</h2>
+      <span id="sampleCount" class="count-pill">0</span>
+    </div>
+    <div id="sampleList" class="sample-list"></div>
+    <div class="panel-foot">
+      <button id="btnUploadSide" class="btn block small" type="button">＋ 上传 CSV / TXT</button>
+      <button id="btnSampleSide" class="btn block ghost small" type="button">加载模拟示例</button>
+      <p class="hint">支持拖拽文件到页面。文件仅在浏览器本地解析，不会上传服务器。</p>
+    </div>
+    <div class="panel-head hist-head">
+      <h2>处理历史</h2>
+      <span class="hint">随项目保存</span>
+    </div>
+    <div id="historyList" class="history-list" aria-live="polite"></div>
+  </aside>
+
+  <!-- 中：主谱图 + 参考轨道 + 底部数据标签 -->
+  <section class="chart-panel" aria-label="谱图与数据">
+    <div class="chart-toolbar">
+      <div id="processBadges" class="badges" aria-live="polite"></div>
+    </div>
+    <div id="scaleWarn" class="scale-warn" hidden>
+      <span id="scaleWarnText"></span>
+      <button id="btnUnify" class="btn small" type="button">统一归一化可见曲线</button>
+    </div>
+    <div id="pickHint" class="pick-hint" hidden></div>
+    <div id="chartWrap" class="chart-wrap">
+      <svg id="chart" viewBox="0 0 960 560" preserveAspectRatio="xMidYMid meet" role="img" aria-label="XRD 谱图"></svg>
+      <div id="emptyState" class="empty-state" hidden>
+        <svg viewBox="0 0 120 60" class="empty-icon" aria-hidden="true">
+          <path d="M4 52 L20 48 L30 18 L40 48 L52 36 L62 8 L74 48 L90 40 L116 44" fill="none" stroke="var(--site-border)" stroke-width="3" stroke-linejoin="round"/>
+        </svg>
+        <h3>还没有可显示的曲线</h3>
+        <p>上传 XRD 数值数据（CSV / TXT），或加载内置模拟示例开始体验。</p>
+        <div class="empty-actions">
+          <button id="btnUploadEmpty" class="btn primary" type="button">上传数据</button>
+          <button id="btnSampleEmpty" class="btn ghost" type="button">加载模拟示例</button>
+        </div>
+        <p class="hint">内置示例为程序生成的模拟数据，仅用于演示，不代表真实实验结果。</p>
+      </div>
+      <div id="tooltip" class="tooltip" hidden></div>
+      <div id="peakReadout" class="peak-readout" hidden></div>
+    </div>
+    <div id="chartStatus" class="chart-status"></div>
+
+    <div class="data-tabs">
+      <div class="dt-bar" role="tablist" aria-label="数据表">
+        <button class="dt-tab active" data-dt="peaks" role="tab" aria-selected="true" type="button">实验峰表 <span id="peakCountPill" class="count-pill">0</span></button>
+        <button class="dt-tab" data-dt="phases" role="tab" aria-selected="false" type="button">已选物相 <span id="phaseCountPill" class="count-pill">0</span></button>
+        <button class="dt-tab" data-dt="tracks" role="tab" aria-selected="false" type="button">参考轨道 <span id="trackCountPill" class="count-pill">0</span></button>
+      </div>
+      <div class="dt-body">
+        <div id="dtPeaks" class="dt-pane">
+          <div class="dt-actions">
+            <span id="peakStaleWarn" class="stale-warn" hidden>⚠ 上游处理已改变，峰表待更新（重新寻峰或手动修订）</span>
+            <span id="peakBasisNote" class="hint"></span>
+            <button id="btnPeakCsv" class="btn tiny" type="button" title="导出当前样品峰表（含来源与行号追溯）">导出峰表 CSV</button>
+            <button id="btnClearPeaks" class="btn tiny ghost" type="button">清空峰表</button>
+          </div>
+          <div class="table-scroll dt-scroll">
+            <table id="peakTable" class="preview-table peak-table"></table>
+          </div>
+        </div>
+        <div id="dtPhases" class="dt-pane" hidden>
+          <div class="dt-actions">
+            <span class="hint">已选物相是独立数据对象：从参考轨道将公开示例卡手动标记（标注来源），非物相鉴定结论。</span>
+          </div>
+          <div id="phaseList" class="phase-list"></div>
+        </div>
+        <div id="dtTracks" class="dt-pane" hidden>
+          <div class="dt-actions">
+            <span id="trackLambdaNote" class="hint"></span>
+            <button id="btnOpenCardsFromTracks" class="btn tiny" type="button">打开示例卡</button>
+          </div>
+          <div id="trackList" class="track-list"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 右：当前工具参数 -->
+  <aside class="panel settings-panel" aria-label="工具参数">
+
+    <div id="toolDisplay" class="tool-pane">
+      <section class="settings-section">
+        <h3>图表设置</h3>
+        <label class="field">
+          <span>图表标题</span>
+          <input id="setTitle" type="text" maxlength="80" placeholder="XRD 图谱对比">
+        </label>
+        <div class="field-row">
+          <label class="field"><span>X 最小 (°)</span><input id="setXMin" type="number" step="any" placeholder="自动"></label>
+          <label class="field"><span>X 最大 (°)</span><input id="setXMax" type="number" step="any" placeholder="自动"></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>Y 最小</span><input id="setYMin" type="number" step="any" placeholder="自动"></label>
+          <label class="field"><span>Y 最大</span><input id="setYMax" type="number" step="any" placeholder="自动"></label>
+        </div>
+        <div class="field-row">
+          <label class="check"><input id="setLegend" type="checkbox" checked><span>显示图例</span></label>
+          <label class="check"><input id="setGrid" type="checkbox" checked><span>显示网格</span></label>
+        </div>
+        <button id="btnResetRange" class="btn small ghost block" type="button">重置为自动范围</button>
+      </section>
+
+      <section class="settings-section">
+        <h3>样品设置</h3>
+        <p id="noSelection" class="hint">在左侧点击选择一个样品，即可编辑名称、颜色、线宽、偏移与归一化。</p>
+        <div id="sampleControls" hidden>
+          <label class="field">
+            <span>样品名称</span>
+            <input id="smpName" type="text" maxlength="60">
+          </label>
+          <div class="field">
+            <span>曲线颜色</span>
+            <div class="color-row">
+              <input id="smpColor" type="color" aria-label="自定义曲线颜色">
+              <div id="smpSwatches" class="swatches"></div>
+            </div>
+          </div>
+          <label class="field">
+            <span>线宽 <output id="smpWidthOut">1.5</output> px</span>
+            <input id="smpWidth" type="range" min="0.5" max="5" step="0.25" value="1.5">
+          </label>
+          <div class="field">
+            <span>纵向偏移 <output id="smpOffsetOut">0</output>（仅显示层）</span>
+            <div class="offset-row">
+              <input id="smpOffsetRange" type="range" min="0" max="2" step="0.01" value="0" aria-label="纵向偏移滑块">
+              <input id="smpOffsetNum" type="number" step="any" min="0" value="0" aria-label="纵向偏移数值">
+            </div>
+          </div>
+          <label class="check">
+            <input id="smpNormalize" type="checkbox">
+            <span>归一化（最强峰 = 1）</span>
+          </label>
+          <p class="hint process-note" id="smpProcessNote"></p>
+          <dl class="stats" id="smpStats"></dl>
+          <details id="smpTrace" class="trace">
+            <summary>导入追溯（行号 / 参数 / 排序 / 跳过行）</summary>
+            <div id="smpTraceBody" class="trace-body"></div>
+          </details>
+          <button id="btnDeleteSample" class="btn small danger block" type="button">删除此样品</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="toolBg" class="tool-pane" hidden>
+      <section class="settings-section">
+        <h3>背景扣除</h3>
+        <p id="bgNoSel" class="hint">先在左侧选择一个样品。背景作用于工作副本，原始数据永不覆盖。</p>
+        <div id="bgControls" hidden>
+          <label class="field"><span>背景方式</span>
+            <select id="bgMode">
+              <option value="none">无背景</option>
+              <option value="snip">SNIP 自动估计</option>
+              <option value="manual">手动背景点（线性插值）</option>
+            </select>
+          </label>
+          <div id="bgSnipOpts">
+            <label class="field">
+              <span>迭代次数 <output id="bgIterOut">24</output>（约等于最宽峰半宽点数）</span>
+              <input id="bgIter" type="range" min="2" max="120" step="1" value="24">
+            </label>
+          </div>
+          <div id="bgManualOpts" hidden>
+            <button id="btnBgPointMode" class="btn small block" type="button">✛ 在图上点击添加背景点</button>
+            <div id="bgPointsList" class="bg-points"></div>
+            <button id="btnBgPointsClear" class="btn tiny ghost" type="button">清空背景点</button>
+          </div>
+          <label class="check"><input id="bgPreview" type="checkbox" checked><span>预览背景线（橙色虚线）</span></label>
+          <label class="check"><input id="bgGhost" type="checkbox" checked><span>扣除后显示原始曲线对照（浅灰）</span></label>
+          <div class="field-row">
+            <button id="btnBgApply" class="btn primary small" type="button">确认扣除</button>
+            <button id="btnBgRestore" class="btn ghost small" type="button">恢复原始</button>
+          </div>
+          <p id="bgStatus" class="hint process-note"></p>
+          <p class="hint">SNIP 适用于缓变连续背景 + 相对窄的衍射峰；迭代次数过大将把宽峰一并削掉。手动背景点适合荧光抬升或已知背景形状。扣除后强度可为负（如实显示，不截断）。背景改变后已有峰表将标为待更新。</p>
+        </div>
+      </section>
+    </div>
+
+    <div id="toolPeaks" class="tool-pane" hidden>
+      <section class="settings-section">
+        <h3>寻峰参数</h3>
+        <p id="pkNoSel" class="hint">先在左侧选择一个样品。</p>
+        <div id="pkControls" hidden>
+          <label class="field">
+            <span>平滑窗口 <output id="pkSmoothOut">9</output> 点（SG 二次，仅检测副本）</span>
+            <input id="pkSmooth" type="range" min="0" max="31" step="1" value="9">
+          </label>
+          <label class="field">
+            <span>峰高阈值 <output id="pkNoiseKOut">3</output> × σ（σ 为稳健噪声估计）</span>
+            <input id="pkNoiseK" type="range" min="0.5" max="20" step="0.5" value="3">
+          </label>
+          <label class="field"><span>绝对峰高下限（留空 = 用 σ 阈值）</span><input id="pkMinHeight" type="number" step="any" min="0" placeholder="自动"></label>
+          <div class="field-row">
+            <label class="field"><span>最小突出度（未设绝对峰高时还须 ≥ 阈值×σ）</span><input id="pkMinProm" type="number" step="any" min="0" value="0"></label>
+            <label class="field"><span>最小峰距 (°)</span><input id="pkMinDist" type="number" step="any" min="0" value="0.15"></label>
+          </div>
+          <div class="field-row">
+            <label class="field"><span>范围起 (°)</span><input id="pkLo" type="number" step="any" placeholder="全范围"></label>
+            <label class="field"><span>范围止 (°)</span><input id="pkHi" type="number" step="any" placeholder="全范围"></label>
+          </div>
+          <div class="field-row">
+            <button id="btnAutoPeaks" class="btn primary small" type="button">自动寻峰</button>
+            <button id="btnPeakAddMode" class="btn ghost small" type="button">✛ 图上手动加峰</button>
+          </div>
+          <p id="pkStatus" class="hint process-note"></p>
+          <p class="hint">寻峰输入 = 工作副本 − 已确认背景（不含归一化与显示偏移）。峰位经抛物线细化；峰高为峰位处校正强度；d 值需实验波长（在卡片库面板确认）。突出度 = 峰顶到两侧鞍点的较小高差，适合肩峰筛选。σ 为全局估计，计数噪声随强度变化时弱峰区偏保守。</p>
+        </div>
+      </section>
+    </div>
+
+    <div id="toolFit" class="tool-pane" hidden>
+      <section class="settings-section">
+        <h3>峰拟合 · 选区多峰拟合（fit-1）</h3>
+        <p class="hint" id="fitScope">做：选区背景扣除 + 多峰拟合 + 峰参数 + 质量评估 + 表观晶粒尺寸。不做：全谱 Rietveld 精修、物相定量（RIR/内标）、峰面积→质量分数、结构精修。峰面积占比仅标注为「峰面积相对占比，非物相含量」。</p>
+        <p class="hint mt-warn" id="fitNormWarn" hidden></p>
+        <p class="hint" id="fitV3Note" hidden>项目为 v3 存档：不含拟合结果。运行拟合并保存后自动升级为 v4（旧项目仍可打开）。</p>
+        <p class="hint"><span class="badge stale" id="fitStaleBadge" hidden>存档库版本与当前服务不一致：待更新</span></p>
+        <div class="field-row">
+          <label class="field"><span>拟合区间</span><select id="fitRegionList" class="input"></select></label>
+          <button id="btnFitDelRegion" class="btn small ghost" type="button">删除区间</button>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>起 (°)</span><input id="fitRMin" class="input" type="number" step="any"></label>
+          <label class="field"><span>止 (°)</span><input id="fitRMax" class="input" type="number" step="any"></label>
+          <button id="btnFitAddRegion" class="btn small" type="button">添加区间</button>
+          <button id="btnFitDragRegion" class="btn small ghost" type="button">图上框选</button>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>背景模型</span><select id="fitBgModel" class="input"><option value="none">无</option><option value="linear" selected>线性</option><option value="poly2">多项式 2 阶</option><option value="poly3">多项式 3 阶</option><option value="anchors">手动锚点折线</option></select></label>
+          <button id="btnFitBgOnly" class="btn small ghost" type="button">背景单独拟合</button>
+          <label class="field"><span>峰型</span><select id="fitShape" class="input"><option value="pseudoVoigt" selected>Pseudo-Voigt (η)</option><option value="gauss">Gaussian</option><option value="lorentz">Lorentzian</option><option value="pearson7">Pearson VII (m)</option></select></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>绝对峰高下限</span><input id="fitMinHeight" class="input" type="number" step="any" value="50"></label>
+          <button id="btnFitInitPeaks" class="btn small" type="button">从原始数据生成候选峰</button>
+          <button id="btnFitAddPeak" class="btn small ghost" type="button">手动加峰</button>
+        </div>
+        <div class="table-scroll fit-scroll"><table class="preview-table mt-table"><thead><tr><th>中心 2θ / 锁</th><th>FWHM / 锁</th><th>峰高 / 锁</th><th>η或m / 锁</th><th></th></tr></thead><tbody id="fitPeakRows"></tbody></table></div>
+        <div class="field-row">
+          <button id="btnFitRun" class="btn primary small" type="button">运行拟合</button>
+          <button id="btnFitCancel" class="btn small ghost" type="button" hidden>取消</button>
+        </div>
+        <p class="hint process-note" id="fitStatus">设置区间与初值后运行拟合；拟合在 Worker 中执行，可取消。</p>
+      </section>
+      <section class="settings-section">
+        <h3>拟合图 · 分峰 / 背景 / 残差</h3>
+        <svg id="fitChart" viewBox="0 0 960 420" role="img" aria-label="峰拟合图与残差"></svg>
+        <div id="fitLegend" class="fit-legend"></div>
+        <p class="hint" id="fitQuality"></p>
+        <div class="table-scroll fit-scroll" id="fitParamTable"></div>
+      </section>
+      <section class="settings-section">
+        <h3>Scherrer 表观晶粒尺寸</h3>
+        <div class="field-row">
+          <label class="field"><span>仪器宽化</span><select id="fitInstMode" class="input"><option value="none" selected>未提供（表观值）</option><option value="fixed">直接填仪器 FWHM</option><option value="standard">标样谱拟合曲线</option></select></label>
+          <label class="field"><span>仪器 FWHM (°)</span><input id="fitInstFwhm" class="input" type="number" step="any"></label>
+          <label class="field"><span>标样谱 (LaB6/Si)</span><input id="fitInstFile" class="input" type="file" accept=".csv,.txt,.xy"></label>
+          <label class="field"><span>K</span><input id="fitK" class="input" type="number" step="0.01" value="0.89"></label>
+        </div>
+        <p class="hint mt-warn" id="fitScherrerWarn" hidden>表观值，未扣除仪器宽化，系统性偏小。Scherrer 适用约 1–100 nm；忽略应变宽化；不与 TEM 粒径等价。</p>
+        <div class="table-scroll fit-scroll" id="fitScherrerTable"></div>
+      </section>
+      <section class="settings-section">
+        <h3>卡片峰表对照（拟合峰 ↔ 参考卡）</h3>
+        <div class="table-scroll fit-scroll" id="fitCardTable"></div>
+      </section>
+      <section class="settings-section">
+        <h3>导出</h3>
+        <div class="field-row">
+          <button id="btnFitCsvParams" class="btn small" type="button">峰参数 CSV</button>
+          <button id="btnFitCsvCurves" class="btn small" type="button">曲线+残差 CSV</button>
+          <button id="btnFitPng" class="btn small" type="button">PNG</button>
+          <button id="btnFitSvg" class="btn small" type="button">SVG</button>
+          <button id="btnFitJson" class="btn small" type="button">拟合 JSON</button>
+        </div>
+      </section>
+    </div>
+
+    <section class="settings-section">
+      <h3>导出与项目</h3>
+      <div class="field-row">
+        <label class="field"><span>图像宽度 (px)</span><input id="exportWidth" type="number" min="480" max="8000" step="10" value="1920"></label>
+        <label class="field"><span>字号倍率 <output id="exportFontOut">1</output></span><input id="exportFont" type="range" min="0.75" max="2" step="0.05" value="1"></label>
+      </div>
+      <p class="hint">PNG / SVG 使用全量显示层数据，含参考轨道、背景预览与峰标记；CSV 为样品三层数据；峰表 CSV 在底部「实验峰表」标签导出。</p>
+      <div class="export-grid">
+        <button id="btnPng2" class="btn block small" type="button">导出 PNG</button>
+        <button id="btnSvg2" class="btn block small" type="button">导出 SVG</button>
+        <button id="btnCsv2" class="btn block small" type="button">三层数据 CSV</button>
+      </div>
+      <div class="storage-note">
+        <strong>数据存储说明</strong>
+        <p>所有数据仅保存在本机浏览器（localStorage），不上传任何服务器；清除浏览器数据会丢失未导出的结果，请及时导出项目 JSON。</p>
+      </div>
+      <button id="btnClearAll" class="btn small danger block" type="button">清空全部样品与设置</button>
+    </section>
+
+  </aside>
+</main>
+
+<!-- 导入对话框 -->
+<div id="importModal" class="modal-overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="impTitle">
+    <div class="modal-head">
+      <div>
+        <h2 id="impTitle">导入数据</h2>
+        <span id="impFileMeta" class="hint"></span>
+      </div>
+      <button id="impClose" class="icon-btn" type="button" aria-label="关闭">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="imp-controls">
+        <label class="field"><span>分隔符</span>
+          <select id="impDelim">
+            <option value="auto">自动检测</option>
+            <option value=",">逗号 ,</option>
+            <option value="\t">制表符 Tab</option>
+            <option value=";">分号 ;</option>
+            <option value="ws">空白（空格 / Tab）</option>
+          </select>
+        </label>
+        <label class="field"><span>跳过文件头行数</span>
+          <input id="impSkip" type="number" min="0" step="1" value="0">
+        </label>
+        <label class="field"><span>X 数据列（2θ）</span><select id="impX"></select></label>
+        <label class="field"><span>Y 数据列（强度）</span><select id="impY"></select></label>
+        <label class="field span2"><span>样品名称</span><input id="impName" type="text" maxlength="60"></label>
+      </div>
+
+      <div class="imp-block">
+        <h4>数据预览<span class="hint">（跳过文件头后的前 8 行，高亮为所选 X / Y 列）</span></h4>
+        <div class="table-scroll">
+          <table id="impTable" class="preview-table"></table>
+        </div>
+      </div>
+
+      <div id="impSummary" class="imp-summary"></div>
+
+      <div id="impQuality" class="imp-quality" hidden>
+        <h4>数据检查<span class="hint">（不会静默修改数据，请选择处理方式）</span></h4>
+        <div id="qDup" class="quality-item" hidden>
+          <p id="qDupText"></p>
+          <label class="check"><input type="radio" name="dupMode" value="keep" checked><span>保留全部重复点（分析按原样）</span></label>
+          <label class="check"><input type="radio" name="dupMode" value="merge"><span>按相同 X 取平均合并（生成独立工作副本，原始保留）</span></label>
+        </div>
+        <div id="qSort" class="quality-item" hidden>
+          <p>2θ 非单调递增（存在回扫或乱序）。</p>
+          <label class="check"><input type="radio" name="sortMode" value="sort" checked><span>生成 2θ 升序独立副本用于分析（原始顺序保留）</span></label>
+          <label class="check"><input type="radio" name="sortMode" value="keep"><span>保持文件顺序，不排序</span></label>
+        </div>
+      </div>
+
+      <div id="impErrors" class="imp-errors" hidden>
+        <h4>无效行明细<span class="hint">（导入不会静默丢弃数据，需你确认后才跳过）</span></h4>
+        <ul id="impErrorList"></ul>
+        <label class="check ack">
+          <input id="impAck" type="checkbox">
+          <span>我已了解上述问题，确认导入时跳过这些无效行（原始文件不受影响）</span>
+        </label>
+      </div>
+
+      <div id="impFatal" class="imp-fatal" hidden></div>
+
+      <div class="imp-extra">
+        <button id="btnDemoFile" class="btn small ghost" type="button">下载示例 TXT 文件（用于测试导入流程）</button>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <span id="impQueue" class="hint"></span>
+      <div class="modal-foot-btns">
+        <button id="impCancel" class="btn ghost" type="button">取消</button>
+        <button id="impConfirm" class="btn primary" type="button">导入</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="dropOverlay" class="drop-overlay" hidden><div class="drop-box">松开以导入 XRD 数据文件（CSV / TXT）</div></div>
+<div id="toast" class="toast" hidden></div>
+
+<div id="drawerScrim" class="drawer-scrim" hidden></div>
+<aside id="cardsDrawer" class="drawer" hidden aria-label="示例参考卡">
+  <div class="drawer-head">
+    <div>
+      <h2>示例参考卡</h2>
+      <span class="drawer-sub">公开许可示例卡（CC0 计算 / MIT 实验）· 离线内置 · 无数据库、无检索、无外部服务</span>
+    </div>
+    <button id="cardsClose" class="icon-btn" type="button" aria-label="关闭">×</button>
+  </div>
+  <div class="drawer-body">
+    <section class="dsec">
+      <h3>公开示例卡</h3>
+      <div id="exStatus" class="lib-status">加载示例卡…</div>
+      <div id="exList"></div>
+      <p class="muted">计算图谱无温度因子/仪器宽化/择优取向；实验谱为混合物峰表（hkl 未指认）。叠加与拟合对照仅供演示，非物相鉴定结论。</p>
+    </section>
+    <section class="dsec">
+      <h3>参考轨道</h3>
+      <p class="muted">每张卡片一条独立棒图轨道，与主谱图共用 X 轴；在底部「参考轨道」标签排序 / 显隐。具备合法 d 值或 2θ 的卡片确认波长后即可预览叠加；核验状态逐卡记录，不作全库已验证宣称。</p>
+      <div class="drow">
+        <select id="stickLambdaPreset" class="input">
+          <option value="">实验波长…</option>
+          <option value="1.5406">Cu Kα1 · 1.5406 Å</option>
+          <option value="1.5418">Cu Kα · 1.5418 Å</option>
+          <option value="1.7890">Co Kα · 1.7890 Å</option>
+          <option value="0.7107">Mo Kα · 0.7107 Å</option>
+          <option value="custom">自定义</option>
+        </select>
+        <input id="stickLambda" class="input narrow" type="number" step="0.0001" min="0.1" max="10" placeholder="Å">
+        <button id="btnLambdaConfirm" class="btn tiny" type="button">确认波长</button>
+      </div>
+      <div id="lambdaStatus" class="muted"></div>
+      <label class="check"><input type="checkbox" id="sticksOn"><span>显示参考轨道（随 PNG / SVG 导出）</span></label>
+      <div id="stickLockNote" class="muted"></div>
+      <div id="refList"></div>
+    </section>
+  </div>
+</aside>
+
+<script src="js/model.js"></script>
+<script src="js/parser.js"></script>
+<script src="js/samples.js"></script>
+<script src="js/analysis.js"></script>
+<script src="js/cards.js"></script>
+<script src="js/chart.js"></script>
+<script src="js/app.js"></script>
+<script src="js/cardsui.js"></script>
+<script src="js/fitcore.js"></script>
+<script src="js/fitui.js"></script>
+</body>
+</html>

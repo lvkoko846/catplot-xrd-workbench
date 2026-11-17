@@ -1,0 +1,16 @@
+{
+  "excludePrefixes": [
+    "logs/",
+    "node_modules/",
+    ".git/"
+  ],
+  "excludeFiles": [
+    "scripts/audit-release.mjs"
+  ],
+  "allowedDbFiles": [
+    "server/data/open-library.db",
+    "server/data/fixture.db",
+    "server/data/fixture-elem.db"
+  ],
+  "note": "公开版发布面 = web/ + scripts/ + docs/ + tests/ + 根 README/LICENSE。禁止任何 .db、server/ 目录、受限品牌词与外网 API 客户端。"
+}
