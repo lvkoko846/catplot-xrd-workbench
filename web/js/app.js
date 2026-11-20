@@ -13,13 +13,15 @@
 
   var state = {
     samples: [],
-    settings: { title: 'XRD 图谱对比', xMin: null, xMax: null, yMin: null, yMax: null, showLegend: true, showGrid: true },
+    settings: { title: 'XRD 图谱对比', xMin: null, xMax: null, yMin: null, yMax: null, showLegend: true, showGrid: true, stack: true, stackGap: 1.15, stackScale: 0.8 },
     selectedId: null,
     refs: [],
     lib: { wavelength: null, sticksOn: false },
     history: [],
     phases: [],
     fit: null,
+    batch: null,
+    match: null,
     projectVersion: null
   };
   var uiTool = 'display';
@@ -269,7 +271,7 @@
       if (h) rebuilt.push(h);
     });
     state.samples = rebuilt;
-    state.settings = Object.assign({ title: 'XRD 图谱对比', xMin: null, xMax: null, yMin: null, yMax: null, showLegend: true, showGrid: true }, inner.settings || {});
+    state.settings = Object.assign({ title: 'XRD 图谱对比', xMin: null, xMax: null, yMin: null, yMax: null, showLegend: true, showGrid: true, stack: true, stackGap: 1.15, stackScale: 0.8 }, inner.settings || {});
     state.selectedId = inner.selectedId || (rebuilt[0] && rebuilt[0].id) || null;
     state.refs = Array.isArray(inner.refs) ? inner.refs : [];
     state.lib = inner.lib && typeof inner.lib === 'object' ? { wavelength: inner.lib.wavelength > 0 ? inner.lib.wavelength : null, sticksOn: !!inner.lib.sticksOn } : { wavelength: null, sticksOn: false };
@@ -616,6 +618,9 @@
     setInputValue($('setYMax'), st.yMax != null ? st.yMax : '');
     $('setLegend').checked = st.showLegend;
     $('setGrid').checked = st.showGrid;
+    $('setStack').checked = st.stack !== false;
+    setInputValue($('setStackGap'), st.stackGap != null ? st.stackGap : 1.15);
+    setInputValue($('setStackScale'), st.stackScale != null ? st.stackScale : 0.8);
 
     var s = getSelected();
     $('noSelection').hidden = !!s;
@@ -686,7 +691,7 @@
   }
 
   /* ---------- 工具切换与数据标签 ---------- */
-  var TOOL_PANES = { display: 'toolDisplay', bg: 'toolBg', peaks: 'toolPeaks', fit: 'toolFit' };
+  var TOOL_PANES = { display: 'toolDisplay', bg: 'toolBg', peaks: 'toolPeaks', fit: 'toolFit', batch: 'toolBatch', match: 'toolMatch' };
   var DT_PANES = { peaks: 'dtPeaks', phases: 'dtPhases', tracks: 'dtTracks' };
   function setTool(t) {
     uiTool = t;
@@ -699,6 +704,8 @@
     if (t !== 'bg' && pickMode === 'bg') setPickMode(null);
     if (t !== 'peaks' && pickMode === 'peak') setPickMode(null);
     if (t === 'fit' && window.CatFitUI) window.CatFitUI.onShow();
+    if (t === 'batch' && window.CatBatchUI) window.CatBatchUI.onShow();
+    if (t === 'match' && window.CatMatchUI) window.CatMatchUI.onShow();
   }
   function setDataTab(t) {
     uiDataTab = t;
@@ -1331,6 +1338,9 @@
   bindRange('setYMin', 'yMin'); bindRange('setYMax', 'yMax');
   $('setLegend').addEventListener('change', function () { state.settings.showLegend = this.checked; renderChart(); save(); });
   $('setGrid').addEventListener('change', function () { state.settings.showGrid = this.checked; renderChart(); save(); });
+  $('setStack').addEventListener('change', function () { state.settings.stack = this.checked; renderChart(); save(); });
+  $('setStackGap').addEventListener('input', function () { var v = +this.value; if (isFinite(v) && v > 0) { state.settings.stackGap = v; renderChart(); save(); } });
+  $('setStackScale').addEventListener('input', function () { var v = +this.value; if (isFinite(v) && v > 0) { state.settings.stackScale = v; renderChart(); save(); } });
   $('btnResetRange').addEventListener('click', function () {
     state.settings.xMin = state.settings.xMax = state.settings.yMin = state.settings.yMax = null;
     ['setXMin', 'setXMax', 'setYMin', 'setYMax'].forEach(function (id) { $(id).value = ''; });
@@ -1562,7 +1572,7 @@
         rebuilt.push(h);
       }
       state.samples = rebuilt;
-      state.settings = Object.assign({ title: 'XRD 图谱对比', xMin: null, xMax: null, yMin: null, yMax: null, showLegend: true, showGrid: true }, v.settings);
+      state.settings = Object.assign({ title: 'XRD 图谱对比', xMin: null, xMax: null, yMin: null, yMax: null, showLegend: true, showGrid: true, stack: true, stackGap: 1.15, stackScale: 0.8 }, v.settings);
       state.selectedId = rebuilt[0] ? rebuilt[0].id : null;
       state.refs = Array.isArray(v.refs) ? v.refs : [];
       state.lib = { wavelength: v.lib && v.lib.wavelength > 0 ? v.lib.wavelength : null, sticksOn: !!(v.lib && v.lib.sticksOn) };
@@ -1588,7 +1598,7 @@
     state.phases = [];
     state.fit = null;
     state.lib.sticksOn = false;
-    state.settings = { title: 'XRD 图谱对比', xMin: null, xMax: null, yMin: null, yMax: null, showLegend: true, showGrid: true };
+    state.settings = { title: 'XRD 图谱对比', xMin: null, xMax: null, yMin: null, yMax: null, showLegend: true, showGrid: true, stack: true, stackGap: 1.15, stackScale: 0.8 };
     highlightPeakId = null; pickMode = null;
     if (window.CatCardsUI) window.CatCardsUI.resolveSticks().then(function () { renderAll(); });
     renderAll();

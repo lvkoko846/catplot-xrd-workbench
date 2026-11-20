@@ -28,7 +28,7 @@
       return { d: p.d, i: p.i, t: t, hkl: p.hkl ? String(p.hkl).trim().split(/s+/).map(Number) : null };
     }).filter(function (p) { return p.t != null; });
     return {
-      key: 'ex:' + card.uid, uid: card.uid, label: card.name, color: color, lambda: lambda,
+      key: (card.source === 'upload' ? 'up:' : 'ex:') + card.uid, uid: card.uid, label: card.name, color: color, lambda: lambda,
       peaks: peaks, withdrawn: false, converted: false,
       license: card.license, pattern_type: card.pattern_type, source: card.source,
       source_url: card.source_url, citation: card.citation, n_peaks: card.n_peaks
@@ -37,7 +37,7 @@
   function validateRefs(refs) {
     var errs = [];
     (refs || []).forEach(function (r, i) {
-      if (!r || typeof r.key !== 'string' || r.key.indexOf('ex:') !== 0) errs.push('refs[' + i + '] 键无效');
+      if (!r || typeof r.key !== 'string' || (r.key.indexOf('ex:') !== 0 && r.key.indexOf('up:') !== 0)) errs.push('refs[' + i + '] 键无效');
     });
     return errs;
   }

@@ -59,7 +59,7 @@
       var sticks = [];
       App.state.refs.forEach(function (r, i) {
         if (r.enabled === false) return;
-        var card = Cards.rt.cards.find(function (c) { return 'ex:' + c.uid === r.key; });
+        var card = r.source === 'upload' ? r.card : Cards.rt.cards.find(function (c) { return 'ex:' + c.uid === r.key; });
         if (!card) { ui.refFail[r.key] = 'missing'; return; }
         var useLam = lam != null ? lam : card.wavelength;
         sticks.push(Cards.makeStick(card, useLam, Cards.STICK_PALETTE[i % Cards.STICK_PALETTE.length]));
@@ -78,11 +78,12 @@
     if (!box) return;
     if (!App.state.refs.length) { box.innerHTML = '<p class="muted">未加入示例卡：在上方列表加入。</p>'; return; }
     box.innerHTML = App.state.refs.map(function (r) {
-      var card = Cards.rt.cards.find(function (c) { return 'ex:' + c.uid === r.key; });
+      var card = r.source === 'upload' ? r.card : Cards.rt.cards.find(function (c) { return 'ex:' + c.uid === r.key; });
       var fail = ui.refFail[r.key];
       return '<div class="drow ref-row"><span class="muted">' + esc(r.name || r.key) + '</span>' +
-        (card ? '<span class="badge ' + (card.pattern_type === 'computed' ? 'sim' : 'offset') + '">' + (card.pattern_type === 'computed' ? '计算图谱' : '实验谱') + '</span><span class="badge offset">' + esc(card.license) + '</span>' : '') +
+        (card ? '<span class="badge ' + (card.pattern_type === 'computed' ? 'sim' : 'offset') + '">' + (card.pattern_type === 'computed' ? '计算图谱' : card.source === 'upload' ? '上传卡片' : '实验谱') + '</span><span class="badge offset">' + esc(card.license) + '</span>' : '') +
         (fail === 'noLambda' ? '<span class="badge stale">待确认波长</span>' : fail ? '<span class="badge stale">不在示例集</span>' : '') +
+        (r.source === 'upload' ? '<button class="btn tiny ghost" type="button" data-ren="' + esc(r.key) + '">改名</button>' : '') +
         '<button class="btn tiny ghost" type="button" data-exdel="' + esc(r.key) + '">移除</button></div>';
     }).join('');
   }
@@ -124,6 +125,20 @@
     }).catch(function (e) { App.toast(String(e.message || e), 'err'); });
   });
   $('refList').addEventListener('click', function (ev) {
+    var ren = ev.target.closest ? ev.target.closest('[data-ren]') : null;
+    if (ren) {
+      var rk = ren.getAttribute('data-ren');
+      var ref = App.state.refs.find(function (r) { return r.key === rk; });
+      if (!ref) return;
+      var nn = window.prompt('轨道标签（卡片号/命名）：', ref.label || ref.name);
+      if (nn == null || !nn.trim()) return;
+      nn = nn.trim();
+      ref.label = nn; ref.name = nn; if (ref.card) ref.card.name = nn;
+      App.checkpoint('重命名参考轨道「' + nn + '」');
+      App.save();
+      resolveSticks().then(function () { App.renderAll(); });
+      return;
+    }
     var b = ev.target.closest ? ev.target.closest('[data-exdel]') : null;
     if (!b) return;
     var key = b.getAttribute('data-exdel');
@@ -132,10 +147,77 @@
     App.save();
     resolveSticks().then(function () { App.renderAll(); });
   });
+  /* ---------- 上传我的卡片：峰表文本 → 多卡 → 棒图轨道 ---------- */
+  function parseUploadCards(text, mode, fallbackName) {
+    var MC = window.CatMatchCore;
+    var blocks = String(text || '').split(/(?=#\s*name\s*=)/i).filter(function (b) { return b.trim(); });
+    if (!blocks.length) blocks = [String(text || '')];
+    var out = [];
+    blocks.forEach(function (b, bi) {
+      var r = MC.parseRefTable(b, { mode: mode, lambda: App.state.lib.wavelength });
+      if (!r.ok) { out.push({ ok: false, errors: r.errors }); return; }
+      var c = r.card;
+      var uid = 'up' + Date.now().toString(36) + bi + Math.random().toString(36).slice(2, 5);
+      out.push({ ok: true, card: {
+        uid: uid, name: c.name && c.name !== '粘贴参考' ? c.name : (fallbackName || '上传卡片') + (blocks.length > 1 ? ' ' + (bi + 1) : ''),
+        formula: c.formula, wavelength: c.lambda != null ? c.lambda : App.state.lib.wavelength,
+        license: 'user-provided', pattern_type: 'user', source: 'upload', citation: c.source || '用户上传',
+        peaks: c.peaks.map(function (p) { return { d: p.d, i: p.i, t: p.t, hkl: p.hkl }; }), n_peaks: c.peaks.length
+      }, errors: r.errors });
+    });
+    return out;
+  }
+  function handleCardUpload(files) {
+    var mode = $('cardUploadMode').value;
+    var statusEl = $('cardUploadStatus');
+    var pending = [].slice.call(files).map(function (f) {
+      return f.text().then(function (txt) { return { name: f.name.replace(/\.[^.]+$/, ''), txt: txt }; });
+    });
+    Promise.all(pending).then(function (list) {
+      var added = 0, errs = [];
+      list.forEach(function (item) {
+        var results;
+        if (/^2-Theta/im.test(item.txt) && window.CatMatchCore && window.CatMatchCore.parsePDFCard) {
+          /* 标准衍射卡片文本(PDF#)：直接解析成轨道，标 化学式+PDF#卡号，不做匹配分析 */
+          var pr = window.CatMatchCore.parsePDFCard(item.txt);
+          if (pr.ok) {
+            var c = pr.card;
+            var uid = 'up' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+            var label = (c.formula ? c.formula + ' ' : '') + (c.cardNo ? 'PDF#' + c.cardNo : c.name);
+            results = [{ ok: true, errors: pr.errors, card: {
+              uid: uid, name: label, formula: c.formula, wavelength: c.lambda != null ? c.lambda : App.state.lib.wavelength,
+              license: 'user-provided', pattern_type: 'user', source: 'upload', citation: 'PDF#' + (c.cardNo || ''),
+              peaks: c.peaks.map(function (p) { return { d: p.d, i: p.i, t: p.t, hkl: p.hkl }; }), n_peaks: c.peaks.length
+            } }];
+          } else results = [{ ok: false, errors: pr.errors }];
+        } else {
+          results = parseUploadCards(item.txt, mode, item.name);
+        }
+        results.forEach(function (r) {
+          if (!r.ok) { errs.push(item.name + ': ' + r.errors.join('；')); return; }
+          var key = 'up:' + r.card.uid;
+          App.state.refs.push({ key: key, uid: r.card.uid, source: 'upload', label: r.card.name, name: r.card.name, formula: r.card.formula, license: 'user-provided', pattern_type: 'user', enabled: true, card: r.card });
+          added++;
+          if (r.errors.length) errs.push(item.name + ': ' + r.errors.join('；'));
+        });
+      });
+      if (added) {
+        App.state.lib.sticksOn = true; var cb = $('sticksOn'); if (cb) cb.checked = true;
+        App.checkpoint('上传参考卡片 ' + added + ' 张');
+        App.save();
+        resolveSticks().then(function () { App.renderAll(); });
+      }
+      statusEl.textContent = added ? '已加入 ' + added + ' 张上传卡片为棒图轨道。' + (errs.length ? ' 提示：' + errs.join(' | ') : '') : '未解析到有效卡片：' + (errs.join(' | ') || '文件为空或格式不符（需 2θ/d + 强度 两列）。');
+      statusEl.className = added ? 'muted' : 'muted mt-err';
+      if (added) App.toast('已加入 ' + added + ' 张上传卡片轨道', 'ok');
+    }).catch(function (e) { statusEl.textContent = '读取文件失败：' + (e.message || e); statusEl.className = 'muted mt-err'; });
+  }
+  $('cardUpload').addEventListener('change', function () { if (this.files && this.files.length) handleCardUpload(this.files); this.value = ''; });
+
   window.CatCardsUI = {
     openDrawer: openDrawer, closeDrawer: closeDrawer, resolveSticks: resolveSticks,
     renderRefs: renderRefs, renderLambda: renderLambda, refreshStatus: refreshStatus,
-    previewRemoteUid: addExample, ui: ui
+    previewRemoteUid: addExample, handleCardUpload: handleCardUpload, ui: ui
   };
   renderLambda();
   refreshStatus();

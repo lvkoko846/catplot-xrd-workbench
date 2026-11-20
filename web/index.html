@@ -42,6 +42,8 @@
     <button class="tool-tab" data-tool="bg" role="tab" aria-selected="false" type="button">背景</button>
     <button class="tool-tab" data-tool="peaks" role="tab" aria-selected="false" type="button">寻峰</button>
     <button class="tool-tab" data-tool="fit" role="tab" aria-selected="false" type="button">峰拟合</button>
+    <button class="tool-tab" data-tool="batch" role="tab" aria-selected="false" type="button">系列批量</button>
+    <button class="tool-tab" data-tool="match" role="tab" aria-selected="false" type="button">物相匹配</button>
   </nav>
 
   <div class="tb-group" role="group" aria-label="卡片库与导出">
@@ -53,6 +55,7 @@
     <button id="btnPng" class="btn small" type="button" title="全量显示层数据，尺寸与视口无关">PNG</button>
     <button id="btnSvg" class="btn small" type="button">SVG</button>
     <button id="btnCsv" class="btn small" type="button" title="原始/分析/显示三层数据，全精度">CSV</button>
+    <button id="btnReportTop" class="btn small primary" type="button" title="自包含 HTML：对比图+趋势+全峰参数+匹配闭环+溯源+诚实清单">组会报告</button>
   </div>
   <span id="saveState" class="save-state pending" aria-live="polite">● 正在初始化…</span>
 </header>
@@ -163,6 +166,13 @@
         <div class="field-row">
           <label class="check"><input id="setLegend" type="checkbox" checked><span>显示图例</span></label>
           <label class="check"><input id="setGrid" type="checkbox" checked><span>显示网格</span></label>
+        </div>
+        <div class="field-row">
+          <label class="check"><input id="setStack" type="checkbox" checked><span>堆叠布局（出版风格，≥2样品）</span></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>堆叠间距</span><input id="setStackGap" type="number" step="0.1" min="1" max="3" value="1.15"></label>
+          <label class="field"><span>曲线缩放</span><input id="setStackScale" type="number" step="0.1" min="0.2" max="2" value="0.8"></label>
         </div>
         <button id="btnResetRange" class="btn small ghost block" type="button">重置为自动范围</button>
       </section>
@@ -343,6 +353,103 @@
       </section>
     </div>
 
+    <div id="toolBatch" class="tool-pane" hidden>
+      <section class="settings-section">
+        <h3>系列样品批量分析 · 趋势（batch-1）</h3>
+        <p class="hint" id="batchScope">对一组样品在共享 2θ 区间内逐一样品拟合（恒用原始 raw 层），汇总峰位 / FWHM / 积分面积 / 表观晶粒尺寸随样品或组分的变化趋势。不做物相定量；晶粒尺寸为 Scherrer 表观值（未扣仪器宽化时系统性偏小）。失败样品给具体原因，不静默跳过。</p>
+        <div class="field-row">
+          <button id="btnBatchSelVisible" class="btn small ghost" type="button">选可见样品</button>
+          <button id="btnBatchSelAll" class="btn small ghost" type="button">全选</button>
+          <button id="btnBatchSelNone" class="btn small ghost" type="button">清空</button>
+          <span class="hint" id="batchSelCount">已选 0</span>
+        </div>
+        <div id="batchSampleList" class="batch-sample-list" aria-label="批量样品选择"></div>
+        <div class="field-row">
+          <label class="field"><span>起 (°)</span><input id="batchRMin" class="input" type="number" step="any" value="20"></label>
+          <label class="field"><span>止 (°)</span><input id="batchRMax" class="input" type="number" step="any" value="80"></label>
+          <label class="field"><span>峰型</span><select id="batchShape" class="input"><option value="pseudoVoigt" selected>Pseudo-Voigt</option><option value="gauss">Gaussian</option><option value="lorentz">Lorentzian</option><option value="pearson7">Pearson VII</option></select></label>
+          <label class="field"><span>背景</span><select id="batchBg" class="input"><option value="none">无</option><option value="linear" selected>线性</option><option value="poly2">多项式 2 阶</option><option value="poly3">多项式 3 阶</option></select></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>绝对峰高下限</span><input id="batchMinHeight" class="input" type="number" step="any" value="50"></label>
+          <label class="field"><span>峰间最小距离 (°)</span><input id="batchMinDist" class="input" type="number" step="any" value="0.3"></label>
+          <label class="field"><span>对齐容差 (°)</span><input id="batchTol" class="input" type="number" step="any" value="1.0"></label>
+          <label class="field"><span>波长 (Å)</span><input id="batchLambda" class="input" type="number" step="any" value="1.5406"></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>仪器宽化</span><select id="batchInstMode" class="input"><option value="none" selected>未提供（表观值）</option><option value="fixed">直接填仪器 FWHM</option></select></label>
+          <label class="field"><span>仪器 FWHM (°)</span><input id="batchInstFwhm" class="input" type="number" step="any"></label>
+          <label class="field"><span>K</span><input id="batchK" class="input" type="number" step="0.01" value="0.89"></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>趋势 X 轴</span><select id="batchXMode" class="input"><option value="index" selected>样品序号</option><option value="value">组分值（逐样品填写）</option></select></label>
+        </div>
+        <div id="batchXValues" class="batch-xvalues" hidden></div>
+        <div class="field-row">
+          <button id="btnBatchRun" class="btn primary small" type="button">运行批量分析</button>
+          <button id="btnBatchCancel" class="btn small ghost" type="button" hidden>取消</button>
+        </div>
+        <p class="hint process-note" id="batchStatus">选择样品与共享区间后运行；逐样品在 Worker 中拟合，可取消。</p>
+        <div id="batchProgress" class="batch-progress" hidden><div id="batchProgressBar" class="batch-progress-bar"></div></div>
+      </section>
+      <section class="settings-section">
+        <h3>趋势图</h3>
+        <div class="field-row">
+          <label class="field"><span>指标</span><select id="batchMetric" class="input"><option value="c" selected>峰位 2θ (°)</option><option value="d">d 值 (Å)</option><option value="w">FWHM (°)</option><option value="area">积分面积</option><option value="D">表观晶粒尺寸 (nm)</option></select></label>
+          <label class="field"><span>参考峰（锚点）</span><select id="batchAnchor" class="input"></select></label>
+          <label class="field"><span>多峰同图</span><input id="batchRel" type="checkbox"> 相对首样品偏移</label>
+        </div>
+        <svg id="batchTrendChart" viewBox="0 0 960 420" role="img" aria-label="系列样品趋势图"></svg>
+        <div id="batchTrendLegend" class="fit-legend"></div>
+        <p class="hint mt-warn" id="batchScherrerWarn" hidden>晶粒尺寸为 Scherrer 表观值，未扣除仪器宽化，系统性偏小；适用约 1–100 nm，忽略应变宽化，不与 TEM 粒径等价。</p>
+        <p class="hint" id="batchTrendNote"></p>
+      </section>
+      <section class="settings-section">
+        <h3>批量结果汇总</h3>
+        <div class="table-scroll fit-scroll" id="batchSummaryTable"></div>
+      </section>
+      <section class="settings-section">
+        <h3>导出</h3>
+        <div class="field-row">
+          <button id="btnBatchTrendCsv" class="btn small" type="button">趋势 CSV</button>
+          <button id="btnBatchSummaryCsv" class="btn small" type="button">汇总 CSV</button>
+          <button id="btnBatchPeaksCsv" class="btn small" type="button">全峰 CSV</button>
+          <button id="btnBatchPng" class="btn small" type="button">趋势 PNG</button>
+          <button id="btnBatchSvg" class="btn small" type="button">趋势 SVG</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="toolMatch" class="tool-pane" hidden>
+      <section class="settings-section">
+        <h3>物相匹配 · 粘贴参考峰表（pm-2-lite）</h3>
+        <p class="hint" id="matchScope">公开版无内置数据库：粘贴你自有合法来源的参考峰表（d-I-hkl 或 2θ-I-hkl），与当前样品实验峰做证据匹配。得分为证据合成（匹配比例/偏差/强峰覆盖），<b>不是物相存在概率</b>；参考峰相对强度&lt;1% 不参与配对；一对一占用。确认物相后可用剩余未解释峰续匹配（多物相闭环）。</p>
+        <p class="hint">实验峰来源：<select id="matchExpSrc" class="input tiny-select"><option value="peaks" selected>寻峰峰表</option><option value="fit">拟合峰（更抗噪）</option></select> · 波长 (Å) <input id="matchLambda" class="input fit-num" type="number" step="any" value="1.5406"> · 容差 2θ (°) <input id="matchTol" class="input fit-num" type="number" step="any" value="0.2"></p>
+        <textarea id="matchRefText" class="input match-textarea" rows="6" placeholder="# name=锐钛矿&#10;# formula=TiO2&#10;# wavelength=1.5406&#10;25.28,100,101&#10;37.80,40,004&#10;48.05,50,200"></textarea>
+        <div class="field-row">
+          <label class="field"><span>首列含义</span><select id="matchMode" class="input"><option value="auto" selected>自动</option><option value="t">2θ (°)</option><option value="d">d (Å)</option></select></label>
+          <button id="btnMatchAddRef" class="btn small" type="button">加入参考</button>
+          <button id="btnMatchExample" class="btn small ghost" type="button">载入示例(TiO2双相)</button>
+          <button id="btnMatchRun" class="btn primary small" type="button">运行匹配</button>
+        </div>
+        <p class="hint process-note" id="matchStatus">粘贴参考峰表并加入后运行；实验峰取自当前样品。</p>
+        <div id="matchRefList" class="match-ref-list"></div>
+      </section>
+      <section class="settings-section">
+        <h3>候选（按证据得分排序）</h3>
+        <div class="table-scroll fit-scroll" id="matchCandTable"></div>
+      </section>
+      <section class="settings-section">
+        <h3>已确认物相 · 覆盖核算</h3>
+        <div id="matchPhaseList"></div>
+        <p class="hint" id="matchCoverage"></p>
+        <div class="field-row">
+          <button id="btnMatchRemaining" class="btn small" type="button">用剩余未解释峰续匹配</button>
+          <button id="btnMatchClearPhases" class="btn small ghost" type="button">清空已确认</button>
+        </div>
+      </section>
+    </div>
+
     <section class="settings-section">
       <h3>导出与项目</h3>
       <div class="field-row">
@@ -462,6 +569,15 @@
       <p class="muted">计算图谱无温度因子/仪器宽化/择优取向；实验谱为混合物峰表（hkl 未指认）。叠加与拟合对照仅供演示，非物相鉴定结论。</p>
     </section>
     <section class="dsec">
+      <h3>上传我的卡片（峰表 → 棒图轨道）</h3>
+      <p class="muted">支持 <b>标准衍射卡片文本（PDF# 格式）</b>（如 PDF#82-1043.txt，自动提取卡号/化学式/波长/峰表）或简单 CSV/TXT 峰表（每行「2θ,强度[,hkl]」或「d,强度[,hkl]」，# name= 等注释，多卡分段）。上传后<b>不做匹配分析</b>，直接按顺序画成底部棒图轨道（纵向压缩堆叠），标注「化学式 PDF#卡号」，可在下方「改名」。请确保你对卡片数据有合法使用权。</p>
+      <div class="drow">
+        <input id="cardUpload" type="file" accept=".csv,.txt,.xy,.dat" multiple>
+        <select id="cardUploadMode" class="input narrow"><option value="auto" selected>自动识别</option><option value="t">首列=2θ</option><option value="d">首列=d</option></select>
+      </div>
+      <div id="cardUploadStatus" class="muted"></div>
+    </section>
+    <section class="dsec">
       <h3>参考轨道</h3>
       <p class="muted">每张卡片一条独立棒图轨道，与主谱图共用 X 轴；在底部「参考轨道」标签排序 / 显隐。具备合法 d 值或 2θ 的卡片确认波长后即可预览叠加；核验状态逐卡记录，不作全库已验证宣称。</p>
       <div class="drow">
@@ -494,5 +610,11 @@
 <script src="js/cardsui.js"></script>
 <script src="js/fitcore.js"></script>
 <script src="js/fitui.js"></script>
+<script src="js/batchcore.js"></script>
+<script src="js/batchui.js"></script>
+<script src="js/matchcore.js"></script>
+<script src="js/matchui.js"></script>
+<script src="js/report.js"></script>
+<script src="js/reportui.js"></script>
 </body>
 </html>

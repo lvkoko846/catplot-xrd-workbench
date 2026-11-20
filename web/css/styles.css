@@ -778,6 +778,7 @@ table.peaks.mini { margin: 6px 0; }
   .topbar { row-gap: 8px; }
   .topbar .save-state { margin-left: 0; }
   .tool-tabs { order: 5; flex: 1 1 100%; overflow-x: auto; }
+  .tb-group { flex: 1 1 100%; flex-wrap: wrap; }
 }
 @media (max-width: 560px) {
   .tb-group { flex-wrap: wrap; }
@@ -848,3 +849,24 @@ table.peaks.mini { margin: 6px 0; }
 #fitPeakRows td { white-space: nowrap; }
 #fitQuality b { color: var(--site-accent); }
 #fitScherrerWarn { border-left: 3px solid #f59e0b; padding-left: 8px; }
+
+/* 系列批量分析（batch-1） */
+.batch-sample-list { max-height: 200px; overflow-y: auto; border: 1px solid var(--site-border); border-radius: 6px; padding: 4px 6px; margin: 6px 0; }
+.batch-sample-row { display: flex; align-items: center; gap: 6px; padding: 3px 2px; font-size: 12.5px; cursor: pointer; }
+.batch-sample-row:hover { background: var(--site-hover, rgba(0,0,0,0.03)); }
+.batch-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; flex: 0 0 auto; }
+.batch-sname { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.batch-xval { width: 76px; padding: 2px 4px; font-size: 12px; flex: 0 0 auto; }
+.batch-xvalues { margin: 4px 0; }
+.batch-progress { height: 8px; background: var(--site-border); border-radius: 4px; overflow: hidden; margin: 6px 0; }
+.batch-progress-bar { height: 100%; width: 0; background: var(--site-accent); transition: width 0.15s ease; }
+#batchScherrerWarn { border-left: 3px solid #f59e0b; padding-left: 8px; }
+#batchTrendChart { width: 100%; height: auto; background: #fff; border: 1px solid var(--site-border); border-radius: 6px; }
+.fit-legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.batch-subhead { font-size: 13px; margin: 10px 0 4px; color: var(--site-text, #334155); }
+
+/* 物相匹配（pm-2-lite） */
+.match-textarea { width: 100%; font-family: ui-monospace, Consolas, monospace; font-size: 12px; resize: vertical; }
+.match-ref-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.match-ref-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; border: 1px solid var(--site-border); border-radius: 12px; padding: 2px 8px; }
+.match-phase-row { display: flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 3px 0; border-bottom: 1px dashed var(--site-border); }

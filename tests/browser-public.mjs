@@ -39,13 +39,15 @@ let r = await ev(ws, `(async () => { ${HELP}
     samples: CatApp.state.samples.length, paths: document.querySelectorAll('#chart path').length,
     fitSoon: !!document.querySelector('.tool-tab[data-tool="fit"] .soon'),
     matchTab: !!document.querySelector('.tool-tab[data-tool="match"]'),
+    matchPaste: !!document.getElementById('matchRefText'),
     elemGrid: !!document.getElementById('elemGrid'),
     external: res.filter(u => !u.startsWith(location.origin)),
     apiCalls: res.filter(u => u.includes('/api/')),
     dbFiles: res.filter(u => /\\.db(\\?|$)/.test(u))
   };
 })()`);
-ok(r.samples === 3 && r.paths >= 3 && !r.fitSoon && !r.matchTab && !r.elemGrid, 'P1 开站即用：3 示例样品+主图；无匹配页/元素周期表/待交付标记', r);
+/* 需求变更：公开版新增"粘贴峰表轻量匹配"（无本地库），故匹配页应存在且为粘贴式；仍无元素周期表/待交付。 */
+ok(r.samples === 3 && r.paths >= 3 && !r.fitSoon && r.matchTab && r.matchPaste && !r.elemGrid, 'P1 开站即用：3 示例样品+主图；匹配为粘贴峰表轻量版（无本地库）/无元素周期表/无待交付', r);
 ok(r.external.length === 0 && r.apiCalls.length === 0 && r.dbFiles.length === 0, 'P2 零外网、零 API 调用、零数据库文件加载', r);
 
 r = await ev(ws, `(async () => { ${HELP}

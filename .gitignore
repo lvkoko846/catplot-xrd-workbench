@@ -1,4 +1,6 @@
 logs/
+preview.log
+preview.err.log
 web/dist/
 node_modules/
 *.db

@@ -93,6 +93,34 @@
     var yd = Mdl.autoYDomain(yLo, yHi, settings.yMin, settings.yMax);
     var yMin = yd[0], yMax = yd[1];
 
+    /* 堆叠瀑布（出版风格，参考用户论文图）：多样品纵向错开、隐藏Y刻度、粗黑框、底部卡片轨道 */
+    var stack = settings.stack === true && samples.length > 1;
+    /* 间距下限 1.0：统一间距=最高峰×缩放×间距，<1 时最高峰必越过上一条基线 */
+    var stackGap = Math.max(1, settings.stackGap != null ? settings.stackGap : 1.15);
+    var stackScale = settings.stackScale != null ? settings.stackScale : 0.8;
+    /* 统一间距基准=所有样品最大峰高×缩放：保证任意样品峰顶不越过上一条基线（峰高差异大时也不重叠） */
+    var stackSpan = 0;
+    if (stack) {
+      samples.forEach(function (s) {
+        var lo = Mdl.minOf(s.display.y), hi = Mdl.maxOf(s.display.y);
+        var sp = ((hi - lo) || Math.abs(hi) || 1) * stackScale;
+        if (sp > stackSpan) stackSpan = sp;
+      });
+      stackSpan = stackSpan || 1;
+    }
+    var stackShift = samples.map(function (s, si) {
+      return stack ? si * stackSpan * stackGap : 0;
+    });
+    if (stack) {
+      var sLo = Infinity, sHi = -Infinity;
+      samples.forEach(function (s, si) {
+        var lo = Mdl.minOf(s.display.y) + stackShift[si], hi = Mdl.maxOf(s.display.y) + stackShift[si];
+        if (lo < sLo) sLo = lo; if (hi > sHi) sHi = hi;
+      });
+      var sSpan = (sHi - sLo) || 1;
+      yMin = sLo - sSpan * 0.05; yMax = sHi + sSpan * 0.05;
+    }
+
     var ml = 76 * k, mr = 26 * k, mt = 58 * k;
     var pw = W - ml - mr;
     var target = Math.max(PREVIEW_MIN_TARGET, Math.round(pw * 2));
@@ -129,6 +157,7 @@
       notes.push(sn);
     }
     if (anySim) notes.push('含模拟数据，仅供演示');
+    if (stack) notes.push('纵向堆叠(仅显示, 间距×' + stackGap + ', 缩放×' + stackScale + ') · 强度轴无刻度');
     var noteLines = wrapNotes(notes, (W - 150) / (10.5 * k));
     var mb = (74 + 12 * (noteLines.length - 1)) * k;
     var minH = mt + 150 * k + lanesH + mb;
@@ -162,15 +191,18 @@
       p.push('<line x1="' + X + '" y1="' + axisY + '" x2="' + X + '" y2="' + (axisY + 5 * k) + '" stroke="#64748b" stroke-width="1"/>');
       p.push('<text x="' + X + '" y="' + (axisY + 20 * k) + '" text-anchor="middle" font-family="' + FONT + '" font-size="' + fs(12) + '" fill="#475569">' + fmtTick(v, xt.step) + '</text>');
     });
-    yt.ticks.forEach(function (v) {
-      var Y = sy(v);
-      p.push('<line x1="' + (ml - 5 * k) + '" y1="' + Y + '" x2="' + ml + '" y2="' + Y + '" stroke="#64748b" stroke-width="1"/>');
-      p.push('<text x="' + (ml - 9 * k) + '" y="' + (Y + 4 * k) + '" text-anchor="end" font-family="' + FONT + '" font-size="' + fs(12) + '" fill="#475569">' + fmtTick(v, yt.step) + '</text>');
-    });
+    if (!stack) {
+      yt.ticks.forEach(function (v) {
+        var Y = sy(v);
+        p.push('<line x1="' + (ml - 5 * k) + '" y1="' + Y + '" x2="' + ml + '" y2="' + Y + '" stroke="#64748b" stroke-width="1"/>');
+        p.push('<text x="' + (ml - 9 * k) + '" y="' + (Y + 4 * k) + '" text-anchor="end" font-family="' + FONT + '" font-size="' + fs(12) + '" fill="#475569">' + fmtTick(v, yt.step) + '</text>');
+      });
+    }
 
-    p.push('<rect x="' + ml + '" y="' + mt + '" width="' + pw + '" height="' + ph + '" fill="none" stroke="#94a3b8" stroke-width="1.2"/>');
+    p.push('<rect x="' + ml + '" y="' + mt + '" width="' + pw + '" height="' + (ph + lanesH) + '" fill="none" stroke="' + (stack ? '#0f172a' : '#94a3b8') + '" stroke-width="' + (stack ? 2.6 * k : 1.2) + '"/>');
     p.push('<text x="' + (ml + pw / 2) + '" y="' + (H - 36 * k - 12 * k * (noteLines.length - 1)) + '" text-anchor="middle" font-family="' + FONT + '" font-size="' + fs(13.5) + '" fill="#334155">2θ (°)</text>');
-    p.push('<text x="' + (20 * k) + '" y="' + (mt + ph / 2) + '" text-anchor="middle" font-family="' + FONT + '" font-size="' + fs(13.5) + '" fill="#334155" transform="rotate(-90 ' + (20 * k) + ' ' + (mt + ph / 2) + ')">' + esc(yLabel) + '</text>');
+    p.push('<text x="' + (20 * k) + '" y="' + (mt + ph / 2) + '" text-anchor="middle" font-family="' + FONT + '" font-size="' + fs(13.5) + '" fill="#334155" transform="rotate(-90 ' + (20 * k) + ' ' + (mt + ph / 2) + ')">' + esc(stack ? 'Intensity (a.u.)' : yLabel) + '</text>');
+    function syS(si, v) { return stack ? sy(v * stackScale + stackShift[si]) : sy(v); }
 
     p.push('<clipPath id="plotClip"><rect x="' + ml + '" y="' + mt + '" width="' + pw + '" height="' + ph + '"/></clipPath>');
     p.push('<g clip-path="url(#plotClip)">');
@@ -193,10 +225,10 @@
       var parts = [];
       for (var i = 0; i < px.length; i++) {
         if (px[i] < xMin - pad || px[i] > xMax + pad) continue;
-        parts.push((parts.length ? 'L' : 'M') + sx(px[i]).toFixed(2) + ' ' + sy(py[i]).toFixed(2));
+        parts.push((parts.length ? 'L' : 'M') + sx(px[i]).toFixed(2) + ' ' + syS(si, py[i]).toFixed(2));
       }
       if (parts.length) {
-        p.push('<path d="' + parts.join('') + '" fill="none" stroke="' + esc(s.color) + '" stroke-width="' + s.lineWidth + '" stroke-linejoin="round" stroke-linecap="round"/>');
+        p.push('<path d="' + parts.join('') + '" fill="none" stroke="' + esc(s.color) + '" stroke-width="' + (stack ? Math.max(1.8, s.lineWidth) : s.lineWidth) + '" stroke-linejoin="round" stroke-linecap="round"/>');
       }
     });
 
@@ -236,7 +268,7 @@
       var ly = mt + ph + ti * laneH;
       var base = ly + laneH - 6 * k;
       var hmax = laneH - 16 * k;
-      p.push('<rect x="' + ml + '" y="' + ly + '" width="' + pw + '" height="' + laneH + '" fill="' + (ti % 2 ? '#f8fafc' : '#ffffff') + '" stroke="#e2e8f0" stroke-width="0.8"/>');
+      p.push('<rect x="' + ml + '" y="' + ly + '" width="' + pw + '" height="' + laneH + '" fill="#ffffff" stroke="' + (stack ? '#0f172a' : '#e2e8f0') + '" stroke-width="' + (stack ? 1.8 * k : 0.8) + '"/>');
       var im = 0;
       st.peaks.forEach(function (pp2) { if (pp2.i > im) im = pp2.i; });
       var spad = (xMax - xMin) * 0.02;
@@ -288,7 +320,8 @@
       W: W, H: H, k: k, dataMode: full ? 'full' : 'preview',
       xMin: xMin, xMax: xMax, yMin: yMin, yMax: yMax,
       plot: { x: ml, y: mt, w: pw, h: ph }, axisY: axisY, laneH: laneH,
-      sx: sx, sy: sy, samples: samples, views: views, legend: legend, tracks: tracks,
+      sx: sx, sy: sy, syS: syS, stack: stack, stackShift: stackShift, stackScale: stackScale,
+      samples: samples, views: views, legend: legend, tracks: tracks,
       noteLines: noteLines.length
     };
     return svg._meta;
