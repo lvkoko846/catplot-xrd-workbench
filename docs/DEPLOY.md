@@ -33,9 +33,9 @@ server {
 
 ### 每次更新同步到公开站点（固定流程）
 公开站点托管在 Qoder Sites，发布动作需在 Qoder 内触发（本仓库无 Sites CLI）。每次功能更新后：
-1. 本地验证：全套测试绿 + `node scripts/audit-release.mjs` PASS（公开面用中性词，禁 ICDD/Jade/PDF 卡片 等受限表述）。
+1. 本地验证：全套测试绿 + `node scripts/audit-release.mjs` PASS（公开面一律中性表述，受限品牌词不得出现）。
 2. 提交：`git add web scripts docs tests README.md .gitignore && git commit`（沿用仓库作者身份）。
-3. 在 Qoder 打开本项目 → Sites 发布（webDirectory=web）→ 确认发布到既有 siteId（见 web/.CatPlot*.qoder.site）。
+3. 在 Qoder 打开本项目 → Sites 发布（projectRoot=仓库根、webDirectory=web）→ 确认发布到既有 siteId（描述符见根目录 .CatPlot*.qoder.site）。
 4. 打开公开链接 Ctrl+F5 验证新功能（Sites 若带缓存需强刷）。
 > 注意：本地 `node scripts/preview.mjs` 只是本地预览，不等于公开站点；公开站点必须经第 3 步重新发布才会更新。
 
