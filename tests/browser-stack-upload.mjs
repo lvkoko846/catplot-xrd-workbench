@@ -3,7 +3,7 @@
    堆叠开关/间距/缩放生效；上传卡片峰表（多卡分段/坏行报错）→ 底部棒图轨道 + 徽标 + 随导出。
    用法：node tests/browser-stack-upload.mjs（需 4173 静态服务常驻） */
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -75,8 +75,15 @@ r = await ev(ws, `(async () => { ${HELP}
 })()`);
 ok(r.added === 0 && /行2|行3|非数值/.test(r.status), 'SU4 坏行上传不入库+具体原因', r);
 
-/* SU4b 真实标准衍射卡片(PDF#)上传 → 轨道标 化学式+PDF#卡号；改名生效 */
-const pdfTxt = readFileSync('F:/XRD/PDF#82-1043.txt', 'utf8');
+/* SU4b 真实标准衍射卡片(PDF#)上传 → 轨道标 化学式+PDF#卡号；改名生效。
+   真实卡片文件不随公开仓库分发（受限许可）；本机无该文件时诚实跳过并计数。 */
+const pdfPath = 'F:/XRD/PDF#82-1043.txt';
+let skipped = 0;
+if (!existsSync(pdfPath)) {
+  skipped++;
+  console.log('  SKIP  SU4b 真实 PDF# 卡片上传（本机无 ' + pdfPath + '；合成卡 SU1–SU3 已覆盖上传/成轨/改名链路）');
+} else {
+const pdfTxt = readFileSync(pdfPath, 'utf8');
 r = await ev(ws, `(async () => { ${HELP}
   const f = new File([${JSON.stringify(pdfTxt)}], 'PDF#82-1043.txt', { type: 'text/plain' });
   Object.defineProperty($('cardUpload'), 'files', { value: [f], configurable: true });
@@ -94,6 +101,7 @@ r = await ev(ws, `(async () => { ${HELP}
   return { hasRef: !!ref, nPeaks: ref && ref.card.peaks.length, hasLabel, renamed: svg2.includes('锌铝尖晶石 PDF#82-1043') };
 })()`);
 ok(r.hasRef && r.nPeaks === 16 && r.hasLabel && r.renamed, 'SU4b 真实PDF卡片成轨道标卡号+改名', r);
+}
 
 /* SU5 堆叠开关回退普通 */
 r = await ev(ws, `(async () => { ${HELP}
@@ -138,6 +146,6 @@ ok(r.uniform && r.noOverlap, 'SU6b 峰高差异大统一间距不重叠', r);
 /* SU7 零控制台错误 */
 ok(consoleErrors.length === 0, 'SU7 全程零控制台错误', consoleErrors.slice(0, 3));
 
-console.log('== 堆叠+上传卡片验收汇总 == 通过 ' + pass + ' / ' + (pass + fail));
+console.log('== 堆叠+上传卡片验收汇总 == 通过 ' + pass + ' / ' + (pass + fail) + (skipped ? '（跳过 ' + skipped + '：本机无真实PDF卡片文件）' : ''));
 ws.close(); chrome.kill();
 process.exit(fail ? 1 : 0);
