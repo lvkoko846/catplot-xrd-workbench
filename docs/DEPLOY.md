@@ -31,6 +31,14 @@ server {
   公开版纯静态、产物 <1 MB，完全满足；不需要 Edge Function/托管 DB。
 - 流程：sites-building 准备（webDirectory=web）→ sites-hosting 发布确认 → 公开链接。发布前必须通过 `node scripts/audit-release.mjs`。
 
+### 每次更新同步到公开站点（固定流程）
+公开站点托管在 Qoder Sites，发布动作需在 Qoder 内触发（本仓库无 Sites CLI）。每次功能更新后：
+1. 本地验证：全套测试绿 + `node scripts/audit-release.mjs` PASS（公开面用中性词，禁 ICDD/Jade/PDF 卡片 等受限表述）。
+2. 提交：`git add web scripts docs tests README.md .gitignore && git commit`（沿用仓库作者身份）。
+3. 在 Qoder 打开本项目 → Sites 发布（webDirectory=web）→ 确认发布到既有 siteId（见 web/.CatPlot*.qoder.site）。
+4. 打开公开链接 Ctrl+F5 验证新功能（Sites 若带缓存需强刷）。
+> 注意：本地 `node scripts/preview.mjs` 只是本地预览，不等于公开站点；公开站点必须经第 3 步重新发布才会更新。
+
 ## 发布门禁
 1. `node scripts/audit-release.mjs` PASS（无 .db/无 server/无受限品牌/无 API 客户端残留）。
 2. 全套测试绿（docs/VERIFICATION.md 第六节）。
