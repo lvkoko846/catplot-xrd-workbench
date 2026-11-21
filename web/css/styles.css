@@ -864,6 +864,7 @@ table.peaks.mini { margin: 6px 0; }
 #batchTrendChart { width: 100%; height: auto; background: #fff; border: 1px solid var(--site-border); border-radius: 6px; }
 .fit-legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
 .batch-subhead { font-size: 13px; margin: 10px 0 4px; color: var(--site-text, #334155); }
+.tech-hint { font-size: 11.5px; max-width: 340px; }
 
 /* 物相匹配（pm-2-lite） */
 .match-textarea { width: 100%; font-family: ui-monospace, Consolas, monospace; font-size: 12px; resize: vertical; }

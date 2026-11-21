@@ -46,6 +46,16 @@
     <button class="tool-tab" data-tool="match" role="tab" aria-selected="false" type="button">物相匹配</button>
   </nav>
 
+  <div class="tb-group" role="group" aria-label="表征选择">
+    <select id="techSelect" class="input tiny-select" aria-label="表征类型" title="切换表征：通用绘图/分析引擎，XRD专属功能仅XRD">
+      <option value="xrd" selected>XRD</option>
+      <option value="raman">拉曼</option>
+      <option value="ftir">红外</option>
+      <option value="xps">XPS</option>
+    </select>
+    <span id="techHint" class="muted tech-hint"></span>
+  </div>
+
   <div class="tb-group" role="group" aria-label="卡片库与导出">
     <button id="btnCards" class="btn ghost small" type="button" title="公开示例参考卡（CC0/MIT，离线内置）">示例参考卡</button>
     <select id="exportScope" class="input tiny-select" aria-label="导出范围" title="导出范围">

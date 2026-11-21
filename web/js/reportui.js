@@ -37,11 +37,13 @@
     if (window.CatCards && CatCards.rt && CatCards.rt.doc && CatCards.rt.doc.cards) {
       CatCards.rt.doc.cards.forEach(function (c) { provenance.push({ name: c.name, license: c.license, source: c.source, url: c.source_url, note: c.pattern_type === 'computed' ? '计算图谱' : '实验谱' }); });
     }
+    var T = window.CatModel.tech(st.technique);
     return {
       title: (st.settings && st.settings.title) || 'CatPlot 组会报告',
       generatedAt: new Date().toISOString(),
+      techniqueName: T.name, xrd: T.xrd, xUnit: T.xUnit,
       mainSvg: mainSvg, trendSvg: trendSvg, samples: samples, fitRegions: fitRegions,
-      batchResults: batchResults, aligned: aligned, match: match, provenance: provenance
+      batchResults: batchResults, aligned: aligned, match: T.xrd ? match : null, provenance: provenance
     };
   }
 

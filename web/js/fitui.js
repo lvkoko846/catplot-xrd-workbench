@@ -121,15 +121,17 @@
       return;
     }
     var res = r.result, Q = res.quality;
+    var T = (window.CatModel && window.CatModel.tech) ? window.CatModel.tech(App.state.technique) : { xrd: true, xLabel: '2θ (°)', xUnit: '°' };
     q.innerHTML = 'Rwp=<b>' + f(Q.rwp, 4) + '</b> · Rp=' + f(Q.rp, 4) + ' · χ²(red)=' + f(Q.chi2red, 3) + ' · 数据点 ' + Q.n + ' · 自由参数 ' + Q.freeParams + ' · 迭代 ' + res.iterations + ' · ' + esc(res.note || '');
     var totArea = res.params.reduce(function (a, p) { return a + p.area; }, 0) || 1;
-    pt.innerHTML = '<table class="preview-table mt-table"><thead><tr><th>#</th><th>中心 2θ</th><th>d (Å)</th><th>峰高</th><th>FWHM (°)</th><th>积分面积</th><th>面积相对占比</th><th>η/m</th><th>SE(中心/FWHM/峰高)</th><th>锁定</th></tr></thead><tbody>' +
+    pt.innerHTML = '<table class="preview-table mt-table"><thead><tr><th>#</th><th>中心 (' + esc(T.xUnit) + ')</th><th' + (T.xrd ? '' : ' hidden') + '>d (Å)</th><th>峰高</th><th>FWHM (' + esc(T.xUnit) + ')</th><th>积分面积</th><th>面积相对占比</th><th>η/m</th><th>SE(中心/FWHM/峰高)</th><th>锁定</th></tr></thead><tbody>' +
       res.params.map(function (p, i) {
-        var lam = libLambda(), d = lam ? Core.dFromT(p.c, lam) : null;
+        var lam = libLambda(), d = (T.xrd && lam) ? Core.dFromT(p.c, lam) : null;
         var locks = Object.keys(p.locks || {}).filter(function (k) { return p.locks[k]; }).join(',') || '—';
-        return '<tr><td>' + (i + 1) + '</td><td>' + f(p.c, 3) + '</td><td>' + f(d, 4) + '</td><td>' + f(p.h, 1) + '</td><td>' + f(p.w, 4) + '</td><td>' + f(p.area, 1) + '</td><td>' + f(100 * p.area / totArea, 1) + '%</td><td>' + f(p.sp, 2) + '</td><td>' + f(p.se && p.se.c, 4) + ' / ' + f(p.se && p.se.w, 4) + ' / ' + f(p.se && p.se.h, 1) + '</td><td>' + locks + '</td></tr>';
+        return '<tr><td>' + (i + 1) + '</td><td>' + f(p.c, 3) + '</td><td' + (T.xrd ? '' : ' hidden') + '>' + f(d, 4) + '</td><td>' + f(p.h, 1) + '</td><td>' + f(p.w, 4) + '</td><td>' + f(p.area, 1) + '</td><td>' + f(100 * p.area / totArea, 1) + '%</td><td>' + f(p.sp, 2) + '</td><td>' + f(p.se && p.se.c, 4) + ' / ' + f(p.se && p.se.w, 4) + ' / ' + f(p.se && p.se.h, 1) + '</td><td>' + locks + '</td></tr>';
       }).join('') + '</tbody></table><p class="hint">面积相对占比 = 峰面积相对占比，非物相含量；标准误为线性近似。</p>';
-    /* Scherrer */
+    /* Scherrer / 卡片对照 仅 XRD */
+    if (!T.xrd) { sc.innerHTML = '<p class="hint">Scherrer 晶粒尺寸与卡片对照为 XRD 专属，当前表征不适用。</p>'; cc.innerHTML = ''; $('fitScherrerWarn').hidden = true; return; }
     var fs = FS(), lam = libLambda(), anyApparent = false, rows = '';
     res.params.forEach(function (p, i) {
       var inst = null;
@@ -212,7 +214,8 @@
       var xv = xMin + (xMax - xMin) * t / 4;
       p.push('<text x="' + sx(xv) + '" y="' + (mt + ph + gap + rh + 14) + '" text-anchor="middle" font-size="11" fill="#475569">' + xv.toFixed(1) + '</text>');
     }
-    p.push('<text x="' + (W - mr) + '" y="' + (H - 4) + '" text-anchor="end" font-size="10" fill="#94a3b8">2θ (°) · 原始数据 · fit-1</text>');
+    var FT = (window.CatModel && window.CatModel.tech) ? window.CatModel.tech(App.state.technique) : { xLabel: '2θ (°)' };
+    p.push('<text x="' + (W - mr) + '" y="' + (H - 4) + '" text-anchor="end" font-size="10" fill="#94a3b8">' + esc(FT.xLabel) + ' · 原始数据 · fit-1</text>');
     if (ui.regionDrag) p.push('<rect x="' + sx(Math.min(ui.regionDrag.a, ui.regionDrag.b)) + '" y="' + mt + '" width="' + Math.abs(sx(ui.regionDrag.b) - sx(ui.regionDrag.a)) + '" height="' + ph + '" fill="rgba(13,148,136,0.12)" stroke="#0d9488" stroke-dasharray="4 3"/>');
     svg.innerHTML = p.join('');
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
@@ -235,10 +238,12 @@
     var r = region(), s = sample();
     if (!r || !s) { status('先选样品与区间。', 'err'); return; }
     var mh = parseFloat($('fitMinHeight').value);
-    var found = AN.findPeaks(s.raw.x, s.raw.y, { minHeight: isFinite(mh) ? mh : 50, noiseK: 3, smooth: 9, minDist: 0.15 });
+    /* 步长自适应：XRD(0.02°)→minDist≈0.15/w≈0.2；拉曼(1cm⁻¹)→minDist≈1.5/w≈8，通用 */
+    var st = Core.step(s.raw.x) || 0.02;
+    var found = AN.findPeaks(s.raw.x, s.raw.y, { minHeight: isFinite(mh) ? mh : 50, noiseK: 3, smooth: 9, minDist: st * 7.5 });
     var inR = found.peaks.filter(function (p) { return p.x >= r.min && p.x <= r.max; }).slice(0, 30);
     if (!inR.length) { status('区间内未检到峰（绝对峰高下限 ' + (isFinite(mh) ? mh : 50) + '）：可降低下限或手动加峰。', 'err'); return; }
-    r.peaks = inR.map(function (p) { return { c: p.x, w: 0.2, h: p.height, sp: 0.5, locks: {} }; });
+    r.peaks = inR.map(function (p) { return { c: p.x, w: st * 10, h: p.height, sp: 0.5, locks: {} }; });
     r.result = null;
     App.save(); renderAllFit();
     status('已从原始数据寻峰生成 ' + r.peaks.length + ' 个候选峰（绝对峰高下限生效）。可拖动/锁定/增删后拟合。', 'ok');

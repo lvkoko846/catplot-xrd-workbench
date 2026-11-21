@@ -85,15 +85,16 @@
       if (res.reason === 'cancelled' || /^no-|^bad-init|^underdetermined|^no-free/.test(res.reason)) break;
     }
     if (!res.ok) return { ok: false, reason: lastReason || res.reason, iterations: res.iterations };
-    /* Scherrer 表观晶粒尺寸（每峰） */
+    /* d 值/Scherrer 为 XRD 专属（settings.xrd!==false）；其他表征仅通用峰参数 */
+    var isXrd = settings.xrd !== false;
     var lambda = settings.lambda != null ? settings.lambda : 1.5406;
     var inst = settings.instrument && settings.instrument.mode === 'fixed' ? settings.instrument.fwhm : null;
     var K = settings.K != null ? settings.K : 0.89;
     var params = res.params.map(function (p) {
-      var sch = Core.scherrer({ center: p.c, fwhm: p.w, lambda: lambda, instFwhm: inst, K: K });
+      var sch = isXrd ? Core.scherrer({ center: p.c, fwhm: p.w, lambda: lambda, instFwhm: inst, K: K }) : { ok: false };
       return {
         c: p.c, w: p.w, h: p.h, sp: p.sp, area: p.area,
-        d: Core.dFromT(p.c, lambda),
+        d: isXrd ? Core.dFromT(p.c, lambda) : null,
         D: sch.ok ? sch.D : null, Dapparent: sch.ok ? sch.apparent : null, Dreason: sch.ok ? null : sch.reason
       };
     });

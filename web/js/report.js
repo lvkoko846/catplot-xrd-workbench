@@ -23,7 +23,7 @@
     var H = [];
     H.push('<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">');
     H.push('<title>' + esc(p.title || 'CatPlot 组会报告') + '</title><style>' + CSS + '</style></head><body>');
-    H.push('<header><h1>' + esc(p.title || 'CatPlot 组会报告') + '</h1><p class="note">生成时间 ' + esc(p.generatedAt || '') + ' · CatPlot（XRD 分析工作台）· 数据仅在本地处理</p></header>');
+    H.push('<header><h1>' + esc(p.title || 'CatPlot 组会报告') + '</h1><p class="note">生成时间 ' + esc(p.generatedAt || '') + ' · 表征：' + esc(p.techniqueName || 'XRD') + ' · CatPlot 多表征分析工作台 · 数据仅在本地处理</p></header>');
 
     /* 样品与溯源 */
     H.push('<section><h2>一、样品与数据来源</h2>');
@@ -59,16 +59,24 @@
       H.push(table(['样品', 'X', '状态', '峰数', 'Rwp', '原因'], p.batchResults.map(function (r) {
         return [r.name, f(r.xValue, 2), r.ok ? '成功' : '失败', r.ok ? r.params.length : 0, r.ok && r.quality ? f(r.quality.rwp, 4) : '—', r.ok ? '' : r.reason];
       })));
-      /* 每样品全部特征峰（多峰样品不截断） */
+      /* 每样品全部特征峰（多峰样品不截断）；d/D 仅 XRD */
+      var isX = p.xrd !== false;
+      var xu = p.xUnit || '°';
       var allRows = [];
       p.batchResults.forEach(function (r) {
         if (!r.ok || !r.params) return;
         r.params.forEach(function (q, qi) {
-          allRows.push([r.name, f(r.xValue, 2), qi + 1, f(q.c, 3), f(q.d, 4), f(q.w, 4), f(q.area, 1), q.D != null ? f(q.D, 2) + (q.Dapparent ? '*' : '') : '—']);
+          var row = [r.name, f(r.xValue, 2), qi + 1, f(q.c, 3)];
+          if (isX) row.push(f(q.d, 4));
+          row.push(f(q.w, 4), f(q.area, 1));
+          if (isX) row.push(q.D != null ? f(q.D, 2) + (q.Dapparent ? '*' : '') : '—');
+          allRows.push(row);
         });
       });
-      if (allRows.length) H.push('<h3>每样品全部特征峰（' + allRows.length + ' 行）</h3>' + table(['样品', 'X', '峰#', '中心2θ', 'd(Å)', 'FWHM(°)', '面积', 'D(nm)'], allRows));
-      H.push('<p class="warn">* 表观晶粒尺寸（Scherrer，未扣仪器宽化时系统性偏小；忽略应变宽化；不与 TEM 粒径等价）。</p></section>');
+      var hd = ['样品', 'X', '峰#', '中心(' + xu + ')']; if (isX) hd.push('d(Å)'); hd.push('FWHM(' + xu + ')', '面积'); if (isX) hd.push('D(nm)');
+      if (allRows.length) H.push('<h3>每样品全部特征峰（' + allRows.length + ' 行）</h3>' + table(hd, allRows));
+      if (isX) H.push('<p class="warn">* 表观晶粒尺寸（Scherrer，未扣仪器宽化时系统性偏小；忽略应变宽化；不与 TEM 粒径等价）。</p>');
+      H.push('</section>');
     }
 
     /* 匹配闭环 */

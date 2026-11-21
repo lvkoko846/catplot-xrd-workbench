@@ -460,6 +460,7 @@
       version: 5,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
+      technique: state.technique || 'xrd',
       selectedId: state.selectedId || null,
       refs: state.refs || [],
       lib: state.lib || null,
@@ -478,6 +479,17 @@
     return JSON.parse(JSON.stringify(payload));
   }
 
+  /* 表征配置：通用谱图引擎（绘图/寻峰/拟合/批量/报告）按配置切换轴标签与专属功能。
+     xrd 保留 d值/Scherrer/卡片/物相匹配；其余表征仅通用绘图+寻峰+拟合+批量趋势。
+     注意：须在 window.CatModel 导出之前声明（var 不提升初始化）。 */
+  var TECHNIQUES = {
+    xrd:    { id: 'xrd',    name: 'XRD',  xLabel: '2θ (°)',            xUnit: '°',        yLabel: '强度 (a.u.)',        yStack: 'Intensity (a.u.)',     xrd: true  },
+    raman:  { id: 'raman',  name: '拉曼', xLabel: '拉曼位移 (cm⁻¹)',   xUnit: 'cm⁻¹',     yLabel: '强度 (a.u.)',        yStack: 'Intensity (a.u.)',     xrd: false },
+    ftir:   { id: 'ftir',   name: '红外', xLabel: '波数 (cm⁻¹)',       xUnit: 'cm⁻¹',     yLabel: '吸光度 (a.u.)',      yStack: 'Absorbance (a.u.)',    xrd: false },
+    xps:    { id: 'xps',    name: 'XPS',  xLabel: '结合能 (eV)',       xUnit: 'eV',       yLabel: '强度 (counts/s)',    yStack: 'Intensity (cps)',      xrd: false }
+  };
+  function tech(id) { return TECHNIQUES[id] || TECHNIQUES.xrd; }
+
   window.CatModel = {
     maxOf: maxOf, minOf: minOf,
     canNormalize: canNormalize, normalizeBlockReason: normalizeBlockReason,
@@ -488,6 +500,7 @@
     formatNum: formatNum, errorSignature: errorSignature,
     defaultBg: defaultBg, defaultPeakParams: defaultPeakParams, defaultPeaks: defaultPeaks,
     validateBg: validateBg, validatePeaks: validatePeaks,
-    validateProject: validateProject, serializeProject: serializeProject
+    validateProject: validateProject, serializeProject: serializeProject,
+    TECHNIQUES: TECHNIQUES, tech: tech
   };
 })();

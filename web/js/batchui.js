@@ -48,7 +48,7 @@
       init: 'auto', minHeight: +$('batchMinHeight').value, minDist: +$('batchMinDist').value,
       lambda: +$('batchLambda').value || 1.5406, K: +$('batchK').value || 0.89,
       instrument: { mode: $('batchInstMode').value, fwhm: $('batchInstFwhm').value === '' ? null : +$('batchInstFwhm').value },
-      xMode: xMode, xValues: xValues, _samples: ss
+      xMode: xMode, xValues: xValues, xrd: !!(window.CatModel && window.CatModel.tech(App.state.technique).xrd), _samples: ss
     };
   }
 
@@ -103,7 +103,18 @@
   }
 
   /* ---------- 趋势图 ---------- */
-  var METRICS = { c: { label: '峰位 2θ (°)', get: function (p) { return p.c; } }, d: { label: 'd 值 (Å)', get: function (p) { return p.d; } }, w: { label: 'FWHM (°)', get: function (p) { return p.w; } }, area: { label: '积分面积', get: function (p) { return p.area; } }, D: { label: '表观晶粒尺寸 (nm)', get: function (p) { return p.D; } } };
+  function METRICS() {
+    var T = window.CatModel.tech(App.state.technique);
+    return { c: { label: '峰位 (' + T.xUnit + ')', get: function (p) { return p.c; } }, d: { label: 'd 值 (Å)', get: function (p) { return p.d; } }, w: { label: 'FWHM (' + T.xUnit + ')', get: function (p) { return p.w; } }, area: { label: '积分面积', get: function (p) { return p.area; } }, D: { label: '表观晶粒尺寸 (nm)', get: function (p) { return p.D; } } };
+  }
+  /* 非 XRD 隐藏 d/D 指标与波长/仪器宽化/K 控件 */
+  function applyBatchTech() {
+    var T = window.CatModel.tech(App.state.technique);
+    var ms = $('batchMetric');
+    if (ms) [].slice.call(ms.options).forEach(function (o) { if (o.value === 'd' || o.value === 'D') o.hidden = !T.xrd; });
+    if (ms && !T.xrd && (ms.value === 'd' || ms.value === 'D')) ms.value = 'c';
+    ['batchLambda', 'batchInstMode', 'batchInstFwhm', 'batchK'].forEach(function (id) { var el = $(id); if (el && el.closest('label')) el.closest('label').hidden = !T.xrd; });
+  }
   function renderAnchorSelect() {
     var sel = $('batchAnchor'), a = ui.aligned;
     if (!a || !a.anchors.length) { sel.innerHTML = '<option value="">（无结果）</option>'; return; }
@@ -113,7 +124,7 @@
   }
   function renderTrend() {
     var svg = $('batchTrendChart'), a = ui.aligned;
-    var metric = $('batchMetric').value, M = METRICS[metric];
+    var metric = $('batchMetric').value, M = METRICS()[metric];
     $('batchScherrerWarn').hidden = !(metric === 'D');
     if (!a || !a.anchors.length) { svg.innerHTML = '<text x="480" y="210" text-anchor="middle" fill="#94a3b8" font-size="16">运行批量分析后显示趋势</text>'; $('batchTrendLegend').innerHTML = ''; $('batchTrendNote').textContent = ''; return; }
     var selVal = $('batchAnchor').value;
@@ -229,8 +240,9 @@
   function exportSvg() { if (!ui.aligned) { status('无结果可导出。', 'err'); return; } Chart.exportSVG($('batchTrendChart'), 'catplot-trend.svg', 1920); }
 
   /* ---------- 刷新与接线 ---------- */
-  function refresh() { renderSampleList(); if (ui.aligned) { renderAnchorSelect(); renderTrend(); renderSummary(); } }
+  function refresh() { applyBatchTech(); renderSampleList(); if (ui.aligned) { renderAnchorSelect(); renderTrend(); renderSummary(); } }
   function onShow() {
+    applyBatchTech();
     /* 默认选中可见样品 */
     if (!Object.keys(ui.selected).length) samples().forEach(function (s) { ui.selected[s.id] = s.visible; });
     renderSampleList();

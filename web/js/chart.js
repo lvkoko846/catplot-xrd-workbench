@@ -134,7 +134,8 @@
     var anyOffset = samples.some(function (s) { return s.offset > 0; });
     var anySim = samples.some(function (s) { return s.source === 'sim'; });
     var anyDec = views.some(function (v) { return v.mode === 'dec'; });
-    var yLabel = anyNorm ? '强度 (a.u. / 归一化)' : '强度 (a.u.)';
+    var T = (window.CatModel && window.CatModel.tech) ? window.CatModel.tech(settings.technique) : { xLabel: '2θ (°)', yLabel: '强度 (a.u.)', yStack: 'Intensity (a.u.)' };
+    var yLabel = anyNorm ? T.yLabel.replace(' (a.u.)', ' (a.u. / 归一化)').replace(' (counts/s)', ' (cps / 归一化)') : T.yLabel;
 
     var notes = [];
     if (anyNorm || anyOffset) {
@@ -200,8 +201,8 @@
     }
 
     p.push('<rect x="' + ml + '" y="' + mt + '" width="' + pw + '" height="' + (ph + lanesH) + '" fill="none" stroke="' + (stack ? '#0f172a' : '#94a3b8') + '" stroke-width="' + (stack ? 2.6 * k : 1.2) + '"/>');
-    p.push('<text x="' + (ml + pw / 2) + '" y="' + (H - 36 * k - 12 * k * (noteLines.length - 1)) + '" text-anchor="middle" font-family="' + FONT + '" font-size="' + fs(13.5) + '" fill="#334155">2θ (°)</text>');
-    p.push('<text x="' + (20 * k) + '" y="' + (mt + ph / 2) + '" text-anchor="middle" font-family="' + FONT + '" font-size="' + fs(13.5) + '" fill="#334155" transform="rotate(-90 ' + (20 * k) + ' ' + (mt + ph / 2) + ')">' + esc(stack ? 'Intensity (a.u.)' : yLabel) + '</text>');
+    p.push('<text x="' + (ml + pw / 2) + '" y="' + (H - 36 * k - 12 * k * (noteLines.length - 1)) + '" text-anchor="middle" font-family="' + FONT + '" font-size="' + fs(13.5) + '" fill="#334155">' + esc(T.xLabel) + '</text>');
+    p.push('<text x="' + (20 * k) + '" y="' + (mt + ph / 2) + '" text-anchor="middle" font-family="' + FONT + '" font-size="' + fs(13.5) + '" fill="#334155" transform="rotate(-90 ' + (20 * k) + ' ' + (mt + ph / 2) + ')">' + esc(stack ? T.yStack : yLabel) + '</text>');
     function syS(si, v) { return stack ? sy(v * stackScale + stackShift[si]) : sy(v); }
 
     p.push('<clipPath id="plotClip"><rect x="' + ml + '" y="' + mt + '" width="' + pw + '" height="' + ph + '"/></clipPath>');

@@ -15,6 +15,7 @@
     samples: [],
     settings: { title: 'XRD 图谱对比', xMin: null, xMax: null, yMin: null, yMax: null, showLegend: true, showGrid: true, stack: true, stackGap: 1.15, stackScale: 0.8 },
     selectedId: null,
+    technique: 'xrd',
     refs: [],
     lib: { wavelength: null, sticksOn: false },
     history: [],
@@ -272,6 +273,7 @@
     });
     state.samples = rebuilt;
     state.settings = Object.assign({ title: 'XRD 图谱对比', xMin: null, xMax: null, yMin: null, yMax: null, showLegend: true, showGrid: true, stack: true, stackGap: 1.15, stackScale: 0.8 }, inner.settings || {});
+    state.technique = inner.technique || 'xrd';
     state.selectedId = inner.selectedId || (rebuilt[0] && rebuilt[0].id) || null;
     state.refs = Array.isArray(inner.refs) ? inner.refs : [];
     state.lib = inner.lib && typeof inner.lib === 'object' ? { wavelength: inner.lib.wavelength > 0 ? inner.lib.wavelength : null, sticksOn: !!inner.lib.sticksOn } : { wavelength: null, sticksOn: false };
@@ -356,8 +358,22 @@
   }
 
   /* ---------- 渲染 ---------- */
+  /* 表征切换：XRD 专属 UI（物相匹配/卡片库/参考棒图/d列）仅 XRD 显示；轴提示按配置 */
+  function applyTechnique() {
+    var T = window.CatModel.tech(state.technique);
+    var isX = T.xrd;
+    var mt = document.querySelector('.tool-tab[data-tool="match"]'); if (mt) mt.hidden = !isX;
+    var bc = $('btnCards'); if (bc) bc.hidden = !isX;
+    var so = $('sticksOn'); if (so && so.closest('label')) so.closest('label').hidden = !isX;
+    var thd = document.querySelector('#peakTable th:nth-child(3)'); if (thd) thd.hidden = !isX;
+    var hint = $('techHint'); if (hint) hint.textContent = '当前表征：' + T.name + '（X 轴 ' + T.xLabel + '）' + (isX ? '' : ' · 通用绘图/寻峰/拟合/批量；d值/Scherrer/卡片/物相匹配仅 XRD');
+    var sel = $('techSelect'); if (sel && sel.value !== state.technique) sel.value = state.technique;
+    if (!isX && state.tool === 'match') setTool('display');
+  }
+
   function renderAll() {
     recomputeAll();
+    applyTechnique();
     renderChart();
     renderSampleList();
     renderBadges();
@@ -455,6 +471,8 @@
   }
 
   function activeTracks() {
+    /* 卡片棒图轨道为 XRD 专属；其他表征不显示 */
+    if (state.technique && state.technique !== 'xrd') return [];
     return state.lib.sticksOn && window.CatCards ? window.CatCards.rt.sticks : [];
   }
 
@@ -506,7 +524,8 @@
       return;
     }
     $('emptyState').hidden = true;
-    window.CatChart.render(svg, vis, state.settings, { tracks: activeTracks(), overlay: chartOverlay(), noteExtra: chartNoteExtra() });
+    var rs = Object.assign({}, state.settings, { technique: state.technique });
+    window.CatChart.render(svg, vis, rs, { tracks: activeTracks(), overlay: chartOverlay(), noteExtra: chartNoteExtra() });
   }
 
   function renderBadges() {
@@ -693,7 +712,13 @@
   /* ---------- 工具切换与数据标签 ---------- */
   var TOOL_PANES = { display: 'toolDisplay', bg: 'toolBg', peaks: 'toolPeaks', fit: 'toolFit', batch: 'toolBatch', match: 'toolMatch' };
   var DT_PANES = { peaks: 'dtPeaks', phases: 'dtPhases', tracks: 'dtTracks' };
+  function setTechnique(id) {
+    state.technique = (window.CatModel.TECHNIQUES[id] ? id : 'xrd');
+    renderAll(); save();
+    toast('已切换表征：' + window.CatModel.tech(state.technique).name, 'ok');
+  }
   function setTool(t) {
+    if (t === 'match' && state.technique !== 'xrd') { toast('物相匹配仅 XRD 表征可用', 'err'); t = 'display'; }
     uiTool = t;
     document.querySelectorAll('.tool-tab').forEach(function (b) {
       var on = b.getAttribute('data-tool') === t;
@@ -1091,8 +1116,9 @@
       : '选择样品后显示其实验峰表。';
     $('btnPeakCsv').disabled = !n;
     $('btnClearPeaks').disabled = !n;
+    var T = window.CatModel.tech(state.technique);
     var thead = document.createElement('thead');
-    thead.innerHTML = '<tr><th>#</th><th>2θ (°)</th><th>d (Å)</th><th>峰高</th><th>突出度</th><th>来源</th><th>文件行号</th><th></th></tr>';
+    thead.innerHTML = '<tr><th>#</th><th>' + T.xLabel + '</th><th' + (T.xrd ? '' : ' hidden') + '>d (Å)</th><th>峰高</th><th>突出度</th><th>来源</th><th>文件行号</th><th></th></tr>';
     table.appendChild(thead);
     var tbody = document.createElement('tbody');
     if (!s || !n) {
@@ -1111,7 +1137,7 @@
       if (stale) tr.className = 'stale-row';
       if (p.id === highlightPeakId) tr.classList.add('hl');
       var d = lam ? AN.dSpacing(p.x, lam) : null;
-      var lineNo = p.index != null && s.working.lineNos[p.index] != null ? s.working.lineNos[p.index] : '—';
+      var lineNo = p.index != null && s.working.lineNos && s.working.lineNos[p.index] != null ? s.working.lineNos[p.index] : '—';
       var cells = [
         String(i + 1),
         p.x.toFixed(3),
@@ -1145,6 +1171,7 @@
           td.textContent = c;
           if (ci === 2 && d == null) td.title = '未确认实验波长，无法计算 d 值';
         }
+        if (ci === 2 && !T.xrd) td.hidden = true;
         tr.appendChild(td);
       });
       tr.addEventListener('click', function () {
@@ -1341,6 +1368,7 @@
   $('setStack').addEventListener('change', function () { state.settings.stack = this.checked; renderChart(); save(); });
   $('setStackGap').addEventListener('input', function () { var v = +this.value; if (isFinite(v) && v > 0) { state.settings.stackGap = v; renderChart(); save(); } });
   $('setStackScale').addEventListener('input', function () { var v = +this.value; if (isFinite(v) && v > 0) { state.settings.stackScale = v; renderChart(); save(); } });
+  $('techSelect').addEventListener('change', function () { setTechnique(this.value); });
   $('btnResetRange').addEventListener('click', function () {
     state.settings.xMin = state.settings.xMax = state.settings.yMin = state.settings.yMax = null;
     ['setXMin', 'setXMax', 'setYMin', 'setYMax'].forEach(function (id) { $(id).value = ''; });
@@ -1483,7 +1511,7 @@
   function doPNG() {
     var list = ensureExportSamples(); if (!list) return;
     hideTooltip();
-    var svg = window.CatChart.renderExport(list, state.settings, { fontScale: exportFontScale(), logicalH: 560, tracks: activeTracks(), overlay: chartOverlay(), noteExtra: chartNoteExtra() });
+    var svg = window.CatChart.renderExport(list, Object.assign({}, state.settings, { technique: state.technique }), { fontScale: exportFontScale(), logicalH: 560, tracks: activeTracks(), overlay: chartOverlay(), noteExtra: chartNoteExtra() });
     var w = exportWidth();
     window.CatChart.exportPNG(svg, 'CatPlot_XRD_' + stamp() + '.png', w)
       .then(function (d) { toast('PNG 已导出：' + d.outW + ' × ' + d.outH + ' px，字号倍率 ' + exportFontScale() + '，范围 ' + ($('exportScope').value === 'all' ? '全部样品' : '可见样品') + '，全量显示层数据' + (activeTracks().length ? '，含参考轨道 ' + activeTracks().length + ' 条' : '') + '。', 'ok'); })
@@ -1492,7 +1520,7 @@
   function doSVG() {
     var list = ensureExportSamples(); if (!list) return;
     hideTooltip();
-    var svg = window.CatChart.renderExport(list, state.settings, { fontScale: exportFontScale(), logicalH: 560, tracks: activeTracks(), overlay: chartOverlay(), noteExtra: chartNoteExtra() });
+    var svg = window.CatChart.renderExport(list, Object.assign({}, state.settings, { technique: state.technique }), { fontScale: exportFontScale(), logicalH: 560, tracks: activeTracks(), overlay: chartOverlay(), noteExtra: chartNoteExtra() });
     var d = window.CatChart.exportSVG(svg, 'CatPlot_XRD_' + stamp() + '.svg', exportWidth());
     toast('SVG 已导出：逻辑画布 ' + d.w + ' × ' + d.h + '，输出宽度 ' + d.outW + ' px，字号倍率 ' + exportFontScale() + '，全量显示层数据' + (activeTracks().length ? '，含参考轨道 ' + activeTracks().length + ' 条' : '') + '。', 'ok');
   }
@@ -1573,6 +1601,7 @@
       }
       state.samples = rebuilt;
       state.settings = Object.assign({ title: 'XRD 图谱对比', xMin: null, xMax: null, yMin: null, yMax: null, showLegend: true, showGrid: true, stack: true, stackGap: 1.15, stackScale: 0.8 }, v.settings);
+      state.technique = v.technique || 'xrd';
       state.selectedId = rebuilt[0] ? rebuilt[0].id : null;
       state.refs = Array.isArray(v.refs) ? v.refs : [];
       state.lib = { wavelength: v.lib && v.lib.wavelength > 0 ? v.lib.wavelength : null, sticksOn: !!(v.lib && v.lib.sticksOn) };
@@ -1598,6 +1627,7 @@
     state.phases = [];
     state.fit = null;
     state.lib.sticksOn = false;
+    state.technique = 'xrd';
     state.settings = { title: 'XRD 图谱对比', xMin: null, xMax: null, yMin: null, yMax: null, showLegend: true, showGrid: true, stack: true, stackGap: 1.15, stackScale: 0.8 };
     highlightPeakId = null; pickMode = null;
     if (window.CatCardsUI) window.CatCardsUI.resolveSticks().then(function () { renderAll(); });
@@ -1919,6 +1949,6 @@
   window.CatApp = {
     state: state, toast: toast, save: save, renderAll: renderAll, renderChart: renderChart,
     activeTracks: activeTracks, checkpoint: checkpoint, logHistory: logHistory,
-    getSelected: getSelected, setTool: setTool, setDataTab: setDataTab, renderPhases: renderPhases
+    getSelected: getSelected, setTool: setTool, setTechnique: setTechnique, setDataTab: setDataTab, renderPhases: renderPhases
   };
 })();
