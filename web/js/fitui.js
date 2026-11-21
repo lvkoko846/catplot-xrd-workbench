@@ -52,13 +52,13 @@
     var w = ensureWorker(), id = ++ui.seq;
     ui.running = true;
     $('btnFitCancel').hidden = false; $('btnFitRun').disabled = true;
-    status(bgOnly ? '背景单独拟合中（峰参数锁定）…' : '联合优化中（LM，解析 Jacobian）…');
+    status(bgOnly ? '背景拟合中…' : '拟合中…');
     ui.pending[id] = function (res) {
-      if (res.reason === 'cancelled') { status('已取消拟合，计算已停止。', 'ok'); renderResults(); return; }
+      if (res.reason === 'cancelled') { status('已取消拟合。', 'ok'); renderResults(); return; }
       if (!res.ok) { status('拟合失败：' + res.reason, 'err'); renderResults(); return; }
       if (bgOnly) {
         r.bg.coeffs = res.bgCoeffs;
-        status('背景单独拟合完成：系数 [' + res.bgCoeffs.map(function (v) { return f(v, 2); }).join(', ') + ']，Rwp=' + f(res.quality.rwp, 4) + '。可继续联合优化。', 'ok');
+        status('背景拟合完成：系数 [' + res.bgCoeffs.map(function (v) { return f(v, 2); }).join(', ') + ']，Rwp=' + f(res.quality.rwp, 4), 'ok');
       } else {
         r.result = res;
         r.bg.coeffs = res.bgCoeffs;
@@ -67,7 +67,7 @@
         FS().at = new Date().toISOString();
         App.checkpoint('峰拟合 ' + f(r.min, 1) + '–' + f(r.max, 1) + '°（' + res.params.length + ' 峰，Rwp=' + f(res.quality.rwp, 4) + '，fit-1）');
         App.save();
-        status('拟合完成：' + res.params.length + ' 峰，迭代 ' + res.iterations + '，Rwp=' + f(res.quality.rwp, 4) + '。面积占比为峰面积相对占比，非物相含量。', 'ok');
+        status('拟合完成：' + res.params.length + ' 峰，Rwp=' + f(res.quality.rwp, 4), 'ok');
       }
       renderAllFit();
     };
@@ -75,7 +75,7 @@
   }
   function cancelFit() {
     if (!ui.running) return;
-    if (ui.worker) { ui.worker.postMessage({ cancel: true }); setTimeout(function () { if (ui.running && ui.worker) { ui.worker.terminate(); ui.worker = null; ui.running = false; ui.finishedAt = Date.now(); $('btnFitCancel').hidden = true; $('btnFitRun').disabled = false; status('已取消拟合，计算已停止。', 'ok'); } }, 1500); }
+    if (ui.worker) { ui.worker.postMessage({ cancel: true }); setTimeout(function () { if (ui.running && ui.worker) { ui.worker.terminate(); ui.worker = null; ui.running = false; ui.finishedAt = Date.now(); $('btnFitCancel').hidden = true; $('btnFitRun').disabled = false; status('已取消拟合。', 'ok'); } }, 1500); }
     status('取消中…');
   }
 

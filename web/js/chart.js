@@ -140,25 +140,21 @@
     var notes = [];
     if (anyNorm || anyOffset) {
       var parts2 = [];
-      if (anyNorm) parts2.push('归一化(最强峰=1)');
+      if (anyNorm) parts2.push('归一化');
       if (anyOffset) parts2.push('纵向偏移(仅显示)');
-      notes.push('数据处理: ' + parts2.join(' + '));
-    } else {
-      notes.push('数据处理: 无（原始强度）');
+      notes.push(parts2.join(' + '));
     }
     (opts.noteExtra || []).forEach(function (t) { notes.push(t); });
-    if (full) notes.push('图像导出: 全量显示层数据');
-    else if (anyDec) notes.push('显示降采样(min-max, 不保证所有局部峰) · 悬停/分析/导出全量');
+    if (!full && anyDec) notes.push('显示降采样 · 导出全量');
     if (tracks.length) {
       var lam0 = tracks[0].lambda;
       var lamTxt = tracks.every(function (t) { return t.lambda === lam0; }) ? (lam0 || '?') : '混合';
-      var sn = '参考轨道 ' + tracks.length + ' 条 · λ=' + lamTxt + 'Å · 待核验参考（非物相结论）';
+      var sn = '参考轨道 ×' + tracks.length + ' · λ=' + lamTxt + 'Å · 非物相结论';
       if (tracks.some(function (s) { return s.withdrawn; })) sn += ' · 含作废卡片';
-      if (tracks.some(function (s) { return s.converted; })) sn += ' · TXT 已由原始波长换算';
       notes.push(sn);
     }
-    if (anySim) notes.push('含模拟数据，仅供演示');
-    if (stack) notes.push('纵向堆叠(仅显示, 间距×' + stackGap + ', 缩放×' + stackScale + ') · 强度轴无刻度');
+    if (anySim) notes.push('含模拟数据');
+    if (stack) notes.push('纵向堆叠(仅显示) · 强度轴无刻度');
     var noteLines = wrapNotes(notes, (W - 150) / (10.5 * k));
     var mb = (74 + 12 * (noteLines.length - 1)) * k;
     var minH = mt + 150 * k + lanesH + mb;

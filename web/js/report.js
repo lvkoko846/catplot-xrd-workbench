@@ -92,7 +92,7 @@
         H.push(table(['物相', '得分', '覆盖峰数', '可靠性'], p.match.phases.map(function (ph) { return [ph.name, ph.score, ph.coveredT.length, ph.reliable ? '可靠' : '证据不足']; })));
       }
       if (p.match.coverage) H.push('<p class="note">覆盖核算：' + esc(p.match.coverage) + '</p>');
-      H.push('<p class="warn">得分为证据合成（匹配比例/偏差/强峰覆盖），<b>不是物相存在概率</b>；参考峰相对强度&lt;1% 不参与配对；重叠峰不自动归属。</p></section>');
+      H.push('<p class="warn">得分为证据合成，<b>不是物相存在概率</b>；&lt;1% 弱峰不配对，重叠峰不自动归属。</p></section>');
     }
 
     /* 方法与诚实清单 */

@@ -93,8 +93,8 @@
     var preset = $('stickLambdaPreset');
     var match = [...preset.options].some(function (o) { return o.value && Number(o.value) === lam; });
     preset.value = lam == null ? '' : (match ? String(lam) : 'custom');
-    $('lambdaStatus').textContent = lam == null ? '未确认实验波长：示例卡含 d 与 2θ，确认波长后按实验波长换算叠加。' : '实验波长 λ=' + lam + ' Å（示例卡 2θ 按此波长换算）';
-    $('stickLockNote').textContent = '示例卡为公开许可数据（CC0/MIT），叠加仅供演示与拟合对照，非物相鉴定结论。';
+    $('lambdaStatus').textContent = lam == null ? '未确认实验波长，确认后卡片按此波长换算' : 'λ=' + lam + ' Å';
+    $('stickLockNote').textContent = '示例卡为公开许可数据（CC0/MIT），仅供对照。';
     var cb = $('sticksOn'); if (cb) cb.checked = !!App.state.lib.sticksOn;
   }
   $('btnCards').addEventListener('click', openDrawer);

@@ -124,7 +124,7 @@
     /* 同分按匹配比例（而非绝对峰数，避免偏向峰表更长的参考），再按绝对峰数 */
     cands.sort(function (a, b) { return b.score - a.score || b.composition.matchFrac - a.composition.matchFrac || b.matched - a.matched; });
     return { algo: 'pm-2-lite', wavelength: lam, tolerance: tolT, scan: scan || null, candidates: cands,
-      scoreNote: '得分为证据合成（匹配比例/偏差/强峰覆盖），不是物相存在概率；参考峰相对强度<1%不参与配对；一对一占用。' };
+      scoreNote: '得分为证据合成，非存在概率；<1% 弱峰不配对，一对一占用。' };
   }
 
   /* 覆盖核算：跨轮按峰位（2θ，容差 tolT）对齐，而非索引。

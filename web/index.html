@@ -81,8 +81,8 @@
     <div id="sampleList" class="sample-list"></div>
     <div class="panel-foot">
       <button id="btnUploadSide" class="btn block small" type="button">＋ 上传 CSV / TXT</button>
-      <button id="btnSampleSide" class="btn block ghost small" type="button">加载模拟示例</button>
-      <p class="hint">支持拖拽文件到页面。文件仅在浏览器本地解析，不会上传服务器。</p>
+      <button id="btnSampleSide" class="btn block ghost small" type="button">加载示例</button>
+      <p class="hint">支持拖拽导入 · 数据仅在本机</p>
     </div>
     <div class="panel-head hist-head">
       <h2>处理历史</h2>
@@ -107,13 +107,13 @@
         <svg viewBox="0 0 120 60" class="empty-icon" aria-hidden="true">
           <path d="M4 52 L20 48 L30 18 L40 48 L52 36 L62 8 L74 48 L90 40 L116 44" fill="none" stroke="var(--site-border)" stroke-width="3" stroke-linejoin="round"/>
         </svg>
-        <h3>还没有可显示的曲线</h3>
-        <p>上传 XRD 数值数据（CSV / TXT），或加载内置模拟示例开始体验。</p>
+        <h3>暂无曲线</h3>
+        <p>上传 CSV / TXT 数据，或加载示例</p>
         <div class="empty-actions">
           <button id="btnUploadEmpty" class="btn primary" type="button">上传数据</button>
-          <button id="btnSampleEmpty" class="btn ghost" type="button">加载模拟示例</button>
+          <button id="btnSampleEmpty" class="btn ghost" type="button">加载示例</button>
         </div>
-        <p class="hint">内置示例为程序生成的模拟数据，仅用于演示，不代表真实实验结果。</p>
+        <p class="hint">示例为程序生成的模拟数据，不代表真实实验</p>
       </div>
       <div id="tooltip" class="tooltip" hidden></div>
       <div id="peakReadout" class="peak-readout" hidden></div>
@@ -140,7 +140,7 @@
         </div>
         <div id="dtPhases" class="dt-pane" hidden>
           <div class="dt-actions">
-            <span class="hint">已选物相是独立数据对象：从参考轨道将公开示例卡手动标记（标注来源），非物相鉴定结论。</span>
+            <span class="hint">从参考轨道手动标记，非鉴定结论。</span>
           </div>
           <div id="phaseList" class="phase-list"></div>
         </div>
@@ -259,7 +259,7 @@
             <button id="btnBgRestore" class="btn ghost small" type="button">恢复原始</button>
           </div>
           <p id="bgStatus" class="hint process-note"></p>
-          <p class="hint">SNIP 适用于缓变连续背景 + 相对窄的衍射峰；迭代次数过大将把宽峰一并削掉。手动背景点适合荧光抬升或已知背景形状。扣除后强度可为负（如实显示，不截断）。背景改变后已有峰表将标为待更新。</p>
+          <p class="hint">SNIP 适合缓变背底；迭代过大会削掉宽峰。扣除后强度可为负，如实显示。</p>
         </div>
       </section>
     </div>
@@ -291,16 +291,16 @@
             <button id="btnPeakAddMode" class="btn ghost small" type="button">✛ 图上手动加峰</button>
           </div>
           <p id="pkStatus" class="hint process-note"></p>
-          <p class="hint">寻峰输入 = 工作副本 − 已确认背景（不含归一化与显示偏移）。峰位经抛物线细化；峰高为峰位处校正强度；d 值需实验波长（在卡片库面板确认）。突出度 = 峰顶到两侧鞍点的较小高差，适合肩峰筛选。σ 为全局估计，计数噪声随强度变化时弱峰区偏保守。</p>
+          <p class="hint">输入 = 工作副本 − 已确认背景。峰位抛物线细化；d 值需先在卡片面板确认波长。</p>
         </div>
       </section>
     </div>
 
     <div id="toolFit" class="tool-pane" hidden>
       <section class="settings-section">
-        <h3>峰拟合 · 选区多峰拟合（fit-1）</h3>
+        <h3>峰拟合</h3>
         <p class="hint" id="fitGuide"></p>
-        <p class="hint" id="fitScope">做：选区背景扣除 + 多峰拟合 + 峰参数 + 质量评估 + 表观晶粒尺寸。不做：全谱 Rietveld 精修、物相定量（RIR/内标）、峰面积→质量分数、结构精修。峰面积占比仅标注为「峰面积相对占比，非物相含量」。</p>
+        <p class="hint" id="fitScope">选区背景 + 多峰拟合 + 质量评估。面积占比为相对占比，<b>非物相含量</b>；不做 Rietveld 精修与物相定量。</p>
         <p class="hint mt-warn" id="fitNormWarn" hidden></p>
         <p class="hint" id="fitV3Note" hidden>项目为 v3 存档：不含拟合结果。运行拟合并保存后自动升级为 v4（旧项目仍可打开）。</p>
         <p class="hint"><span class="badge stale" id="fitStaleBadge" hidden>存档库版本与当前服务不一致：待更新</span></p>
@@ -346,7 +346,7 @@
           <label class="field"><span>标样谱 (LaB6/Si)</span><input id="fitInstFile" class="input" type="file" accept=".csv,.txt,.xy"></label>
           <label class="field"><span>K</span><input id="fitK" class="input" type="number" step="0.01" value="0.89"></label>
         </div>
-        <p class="hint mt-warn" id="fitScherrerWarn" hidden>表观值，未扣除仪器宽化，系统性偏小。Scherrer 适用约 1–100 nm；忽略应变宽化；不与 TEM 粒径等价。</p>
+        <p class="hint mt-warn" id="fitScherrerWarn" hidden>表观值，未扣除仪器宽化，系统性偏小。忽略应变宽化，不与 TEM 粒径等价。</p>
         <div class="table-scroll fit-scroll" id="fitScherrerTable"></div>
       </section>
       <section class="settings-section">
@@ -376,8 +376,8 @@
 
     <div id="toolBatch" class="tool-pane" hidden>
       <section class="settings-section">
-        <h3>系列样品批量分析 · 趋势（batch-1）</h3>
-        <p class="hint" id="batchScope">对一组样品在共享 2θ 区间内逐一样品拟合（恒用原始 raw 层），汇总峰位 / FWHM / 积分面积 / 表观晶粒尺寸随样品或组分的变化趋势。不做物相定量；晶粒尺寸为 Scherrer 表观值（未扣仪器宽化时系统性偏小）。失败样品给具体原因，不静默跳过。</p>
+        <h3>系列批量 · 趋势</h3>
+        <p class="hint" id="batchScope">多样品共享区间逐一套拟合，汇总峰位 / FWHM / 面积 / 表观晶粒尺寸趋势。晶粒尺寸为表观值；不做物相定量。</p>
         <div class="field-row">
           <button id="btnBatchSelVisible" class="btn small ghost" type="button">选可见样品</button>
           <button id="btnBatchSelAll" class="btn small ghost" type="button">全选</button>
@@ -407,10 +407,10 @@
         </div>
         <div id="batchXValues" class="batch-xvalues" hidden></div>
         <div class="field-row">
-          <button id="btnBatchRun" class="btn primary small" type="button">运行批量分析</button>
+          <button id="btnBatchRun" class="btn primary small" type="button">运行</button>
           <button id="btnBatchCancel" class="btn small ghost" type="button" hidden>取消</button>
         </div>
-        <p class="hint process-note" id="batchStatus">选择样品与共享区间后运行；逐样品在 Worker 中拟合，可取消。</p>
+        <p class="hint process-note" id="batchStatus">选择样品与共享区间后运行。</p>
         <div id="batchProgress" class="batch-progress" hidden><div id="batchProgressBar" class="batch-progress-bar"></div></div>
       </section>
       <section class="settings-section">
@@ -422,7 +422,7 @@
         </div>
         <svg id="batchTrendChart" viewBox="0 0 960 420" role="img" aria-label="系列样品趋势图"></svg>
         <div id="batchTrendLegend" class="fit-legend"></div>
-        <p class="hint mt-warn" id="batchScherrerWarn" hidden>晶粒尺寸为 Scherrer 表观值，未扣除仪器宽化，系统性偏小；适用约 1–100 nm，忽略应变宽化，不与 TEM 粒径等价。</p>
+        <p class="hint mt-warn" id="batchScherrerWarn" hidden>表观值：未扣仪器宽化，系统性偏小；不与 TEM 粒径等价。</p>
         <p class="hint" id="batchTrendNote"></p>
       </section>
       <section class="settings-section">
@@ -443,30 +443,30 @@
 
     <div id="toolMatch" class="tool-pane" hidden>
       <section class="settings-section">
-        <h3>物相匹配 · 粘贴参考峰表（pm-2-lite）</h3>
-        <p class="hint" id="matchScope">公开版无内置数据库：粘贴你自有合法来源的参考峰表（d-I-hkl 或 2θ-I-hkl），与当前样品实验峰做证据匹配。得分为证据合成（匹配比例/偏差/强峰覆盖），<b>不是物相存在概率</b>；参考峰相对强度&lt;1% 不参与配对；一对一占用。确认物相后可用剩余未解释峰续匹配（多物相闭环）。</p>
-        <p class="hint">实验峰来源：<select id="matchExpSrc" class="input tiny-select"><option value="peaks" selected>寻峰峰表</option><option value="fit">拟合峰（更抗噪）</option></select> · 波长 (Å) <input id="matchLambda" class="input fit-num" type="number" step="any" value="1.5406"> · 容差 2θ (°) <input id="matchTol" class="input fit-num" type="number" step="any" value="0.2"></p>
+        <h3>物相匹配</h3>
+        <p class="hint" id="matchScope">粘贴参考峰表（d-I-hkl 或 2θ-I-hkl）与实验峰证据匹配。得分为证据合成，<b>不是物相存在概率</b>；确认后可用剩余峰续匹配。</p>
+        <p class="hint">实验峰：<select id="matchExpSrc" class="input tiny-select"><option value="peaks" selected>寻峰</option><option value="fit">拟合（抗噪）</option></select> · λ (Å) <input id="matchLambda" class="input fit-num" type="number" step="any" value="1.5406"> · 容差 (°) <input id="matchTol" class="input fit-num" type="number" step="any" value="0.2"></p>
         <textarea id="matchRefText" class="input match-textarea" rows="6" placeholder="# name=锐钛矿&#10;# formula=TiO2&#10;# wavelength=1.5406&#10;25.28,100,101&#10;37.80,40,004&#10;48.05,50,200"></textarea>
         <div class="field-row">
           <label class="field"><span>首列含义</span><select id="matchMode" class="input"><option value="auto" selected>自动</option><option value="t">2θ (°)</option><option value="d">d (Å)</option></select></label>
           <button id="btnMatchAddRef" class="btn small" type="button">加入参考</button>
-          <button id="btnMatchExample" class="btn small ghost" type="button">载入示例(TiO2双相)</button>
+          <button id="btnMatchExample" class="btn small ghost" type="button">载入示例</button>
           <button id="btnMatchRun" class="btn primary small" type="button">运行匹配</button>
         </div>
-        <p class="hint process-note" id="matchStatus">粘贴参考峰表并加入后运行；实验峰取自当前样品。</p>
+        <p class="hint process-note" id="matchStatus">粘贴参考峰表加入后运行。</p>
         <div id="matchRefList" class="match-ref-list"></div>
       </section>
       <section class="settings-section">
-        <h3>候选（按证据得分排序）</h3>
+        <h3>候选</h3>
         <div class="table-scroll fit-scroll" id="matchCandTable"></div>
       </section>
       <section class="settings-section">
-        <h3>已确认物相 · 覆盖核算</h3>
+        <h3>已确认物相</h3>
         <div id="matchPhaseList"></div>
         <p class="hint" id="matchCoverage"></p>
         <div class="field-row">
-          <button id="btnMatchRemaining" class="btn small" type="button">用剩余未解释峰续匹配</button>
-          <button id="btnMatchClearPhases" class="btn small ghost" type="button">清空已确认</button>
+          <button id="btnMatchRemaining" class="btn small" type="button">剩余峰续匹配</button>
+          <button id="btnMatchClearPhases" class="btn small ghost" type="button">清空</button>
         </div>
       </section>
     </div>
@@ -477,15 +477,14 @@
         <label class="field"><span>图像宽度 (px)</span><input id="exportWidth" type="number" min="480" max="8000" step="10" value="1920"></label>
         <label class="field"><span>字号倍率 <output id="exportFontOut">1</output></span><input id="exportFont" type="range" min="0.75" max="2" step="0.05" value="1"></label>
       </div>
-      <p class="hint">PNG / SVG 使用全量显示层数据，含参考轨道、背景预览与峰标记；CSV 为样品三层数据；峰表 CSV 在底部「实验峰表」标签导出。</p>
+      <p class="hint">PNG / SVG 为全量显示层数据（含轨道与峰标记）；CSV 为三层数据。</p>
       <div class="export-grid">
         <button id="btnPng2" class="btn block small" type="button">导出 PNG</button>
         <button id="btnSvg2" class="btn block small" type="button">导出 SVG</button>
         <button id="btnCsv2" class="btn block small" type="button">三层数据 CSV</button>
       </div>
       <div class="storage-note">
-        <strong>数据存储说明</strong>
-        <p>所有数据仅保存在本机浏览器（localStorage），不上传任何服务器；清除浏览器数据会丢失未导出的结果，请及时导出项目 JSON。</p>
+        <p>数据仅存本机浏览器，不上传服务器；清缓存会丢失未导出内容，请及时导出项目 JSON。</p>
       </div>
       <button id="btnClearAll" class="btn small danger block" type="button">清空全部样品与设置</button>
     </section>
@@ -523,7 +522,7 @@
       </div>
 
       <div class="imp-block">
-        <h4>数据预览<span class="hint">（跳过文件头后的前 8 行，高亮为所选 X / Y 列）</span></h4>
+        <h4>数据预览<span class="hint">（前 8 行，高亮所选 X / Y 列）</span></h4>
         <div class="table-scroll">
           <table id="impTable" class="preview-table"></table>
         </div>
@@ -532,32 +531,32 @@
       <div id="impSummary" class="imp-summary"></div>
 
       <div id="impQuality" class="imp-quality" hidden>
-        <h4>数据检查<span class="hint">（不会静默修改数据，请选择处理方式）</span></h4>
+        <h4>数据检查<span class="hint">（不静默修改，请选择处理方式）</span></h4>
         <div id="qDup" class="quality-item" hidden>
           <p id="qDupText"></p>
-          <label class="check"><input type="radio" name="dupMode" value="keep" checked><span>保留全部重复点（分析按原样）</span></label>
-          <label class="check"><input type="radio" name="dupMode" value="merge"><span>按相同 X 取平均合并（生成独立工作副本，原始保留）</span></label>
+          <label class="check"><input type="radio" name="dupMode" value="keep" checked><span>保留全部重复点</span></label>
+          <label class="check"><input type="radio" name="dupMode" value="merge"><span>相同 X 取平均合并（生成独立工作副本）</span></label>
         </div>
         <div id="qSort" class="quality-item" hidden>
-          <p>2θ 非单调递增（存在回扫或乱序）。</p>
-          <label class="check"><input type="radio" name="sortMode" value="sort" checked><span>生成 2θ 升序独立副本用于分析（原始顺序保留）</span></label>
-          <label class="check"><input type="radio" name="sortMode" value="keep"><span>保持文件顺序，不排序</span></label>
+          <p>2θ 非单调递增（回扫或乱序）。</p>
+          <label class="check"><input type="radio" name="sortMode" value="sort" checked><span>生成升序副本用于分析（原始保留）</span></label>
+          <label class="check"><input type="radio" name="sortMode" value="keep"><span>保持文件顺序</span></label>
         </div>
       </div>
 
       <div id="impErrors" class="imp-errors" hidden>
-        <h4>无效行明细<span class="hint">（导入不会静默丢弃数据，需你确认后才跳过）</span></h4>
+        <h4>无效行明细<span class="hint">（需确认后才跳过，不静默丢弃）</span></h4>
         <ul id="impErrorList"></ul>
         <label class="check ack">
           <input id="impAck" type="checkbox">
-          <span>我已了解上述问题，确认导入时跳过这些无效行（原始文件不受影响）</span>
+          <span>确认跳过上述无效行（原始文件不受影响）</span>
         </label>
       </div>
 
       <div id="impFatal" class="imp-fatal" hidden></div>
 
       <div class="imp-extra">
-        <button id="btnDemoFile" class="btn small ghost" type="button">下载示例 TXT 文件（用于测试导入流程）</button>
+        <button id="btnDemoFile" class="btn small ghost" type="button">下载示例 TXT</button>
       </div>
     </div>
     <div class="modal-foot">
@@ -584,14 +583,14 @@
   </div>
   <div class="drawer-body">
     <section class="dsec">
-      <h3>公开示例卡</h3>
+      <h3>示例卡</h3>
       <div id="exStatus" class="lib-status">加载示例卡…</div>
       <div id="exList"></div>
-      <p class="muted">计算图谱无温度因子/仪器宽化/择优取向；实验谱为混合物峰表（hkl 未指认）。叠加与拟合对照仅供演示，非物相鉴定结论。</p>
+      <p class="muted">计算图谱 / 实验谱，仅供对照，非鉴定结论。</p>
     </section>
     <section class="dsec">
-      <h3>上传我的卡片（峰表 → 棒图轨道）</h3>
-      <p class="muted">支持 <b>标准衍射卡片文本（PDF# 格式）</b>（如 PDF#82-1043.txt，自动提取卡号/化学式/波长/峰表）或简单 CSV/TXT 峰表（每行「2θ,强度[,hkl]」或「d,强度[,hkl]」，# name= 等注释，多卡分段）。上传后<b>不做匹配分析</b>，直接按顺序画成底部棒图轨道（纵向压缩堆叠），标注「化学式 PDF#卡号」，可在下方「改名」。请确保你对卡片数据有合法使用权。</p>
+      <h3>上传卡片</h3>
+      <p class="muted">支持 PDF# 卡片文本（自动提取卡号/化学式/波长/峰表）或 CSV/TXT 峰表（2θ 或 d + 强度，# name= 分段多卡）。上传后直接画成底部棒图轨道，可改名。</p>
       <div class="drow">
         <input id="cardUpload" type="file" accept=".csv,.txt,.xy,.dat" multiple>
         <select id="cardUploadMode" class="input narrow"><option value="auto" selected>自动识别</option><option value="t">首列=2θ</option><option value="d">首列=d</option></select>
@@ -600,7 +599,6 @@
     </section>
     <section class="dsec">
       <h3>参考轨道</h3>
-      <p class="muted">每张卡片一条独立棒图轨道，与主谱图共用 X 轴；在底部「参考轨道」标签排序 / 显隐。具备合法 d 值或 2θ 的卡片确认波长后即可预览叠加；核验状态逐卡记录，不作全库已验证宣称。</p>
       <div class="drow">
         <select id="stickLambdaPreset" class="input">
           <option value="">实验波长…</option>

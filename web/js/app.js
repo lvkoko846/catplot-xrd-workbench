@@ -374,7 +374,7 @@
     var bc = $('btnCards'); if (bc) bc.hidden = !isX;
     var so = $('sticksOn'); if (so && so.closest('label')) so.closest('label').hidden = !isX;
     var thd = document.querySelector('#peakTable th:nth-child(3)'); if (thd) thd.hidden = !isX;
-    var hint = $('techHint'); if (hint) hint.textContent = '当前表征：' + T.name + '（X 轴 ' + T.xLabel + '）' + (isX ? '' : ' · 通用绘图/寻峰/拟合/批量；d值/Scherrer/卡片/物相匹配仅 XRD');
+    var hint = $('techHint'); if (hint) hint.textContent = isX ? '' : '通用分析；d值/晶粒尺寸/卡片/匹配仅 XRD';
     var sel = $('techSelect'); if (sel && sel.value !== state.technique) sel.value = state.technique;
     if (!isX && state.tool === 'match') setTool('display');
   }
@@ -510,14 +510,14 @@
     var s = getSelected();
     var notes = [];
     if (s) {
-      if (s.bg && s.bg.applied) notes.push('背景: ' + bgName(s.bg) + ' 已扣除 · 样品「' + s.name + '」');
-      else if (s.bg && s.bg.mode !== 'none' && s.bg.preview) notes.push('背景: 预览中（未扣除）· 样品「' + s.name + '」');
+      if (s.bg && s.bg.applied) notes.push('背景 ' + bgName(s.bg) + ' 已扣除');
+      else if (s.bg && s.bg.mode !== 'none' && s.bg.preview) notes.push('背景预览中（未扣除）');
       if (s.peaks && s.peaks.list.length) {
-        notes.push('实验峰 ' + s.peaks.list.length + ' 个' + (peaksStale(s) ? '（上游已改变，待更新）' : '') + ' · 寻峰输入=工作副本−已确认背景');
+        notes.push('实验峰 ' + s.peaks.list.length + ' 个' + (peaksStale(s) ? '（待更新）' : ''));
       }
     }
     var tr = activeTracks();
-    if (tr.some(function (t) { return t.originalOnly; })) notes.push('部分 TXT 轨道按原始波长显示（未确认实验波长）');
+    if (tr.some(function (t) { return t.originalOnly; })) notes.push('部分轨道按原始波长显示');
     return notes;
   }
 
@@ -1092,7 +1092,7 @@
     highlightPeakId = null;
     renderAll();
     setDataTab('peaks');
-    toast('寻峰完成：' + res.peaks.length + ' 个峰（' + ms + ' ms，σ≈' + (Math.round(res.sigma * 100) / 100) + '）。峰位经抛物线细化，可手动增删。', 'ok');
+    toast('寻峰完成：' + res.peaks.length + ' 个峰（' + ms + ' ms）', 'ok');
   });
   $('btnPeakAddMode').addEventListener('click', function () {
     if (!getSelected()) { toast('请先选择一个样品。', 'err'); return; }
@@ -1524,16 +1524,16 @@
     hideTooltip();
     var svg = window.CatChart.renderExport(list, Object.assign({}, state.settings, { technique: state.technique }), { fontScale: exportFontScale(), logicalH: 560, tracks: activeTracks(), overlay: chartOverlay(), noteExtra: chartNoteExtra() });
     var w = exportWidth();
-    window.CatChart.exportPNG(svg, 'CatPlot_XRD_' + stamp() + '.png', w)
-      .then(function (d) { toast('PNG 已导出：' + d.outW + ' × ' + d.outH + ' px，字号倍率 ' + exportFontScale() + '，范围 ' + ($('exportScope').value === 'all' ? '全部样品' : '可见样品') + '，全量显示层数据' + (activeTracks().length ? '，含参考轨道 ' + activeTracks().length + ' 条' : '') + '。', 'ok'); })
+    window.CatChart.exportPNG(svg, 'CatPlot_' + window.CatModel.tech(state.technique).name + '_' + stamp() + '.png', w)
+      .then(function (d) { toast('PNG 已导出：' + d.outW + ' × ' + d.outH + ' px。', 'ok'); })
       .catch(function (e) { toast('PNG 导出失败：' + e.message, 'err'); });
   }
   function doSVG() {
     var list = ensureExportSamples(); if (!list) return;
     hideTooltip();
     var svg = window.CatChart.renderExport(list, Object.assign({}, state.settings, { technique: state.technique }), { fontScale: exportFontScale(), logicalH: 560, tracks: activeTracks(), overlay: chartOverlay(), noteExtra: chartNoteExtra() });
-    var d = window.CatChart.exportSVG(svg, 'CatPlot_XRD_' + stamp() + '.svg', exportWidth());
-    toast('SVG 已导出：逻辑画布 ' + d.w + ' × ' + d.h + '，输出宽度 ' + d.outW + ' px，字号倍率 ' + exportFontScale() + '，全量显示层数据' + (activeTracks().length ? '，含参考轨道 ' + activeTracks().length + ' 条' : '') + '。', 'ok');
+    var d = window.CatChart.exportSVG(svg, 'CatPlot_' + window.CatModel.tech(state.technique).name + '_' + stamp() + '.svg', exportWidth());
+    toast('SVG 已导出：宽度 ' + d.outW + ' px。', 'ok');
   }
   function csvCell(v) {
     var s = String(v);
@@ -1566,8 +1566,8 @@
       }
     });
     var blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    window.CatChart.download(blob, 'CatPlot_XRD_数据_' + stamp() + '.csv');
-    toast('CSV 已导出：' + list.length + ' 个样品（' + ($('exportScope').value === 'all' ? '全部' : '可见') + '），含原始行号、原始/分析/显示三值与偏移，全精度无截断。', 'ok');
+    window.CatChart.download(blob, 'CatPlot_' + window.CatModel.tech(state.technique).name + '_数据_' + stamp() + '.csv');
+    toast('CSV 已导出：' + list.length + ' 个样品，三层数据全精度。', 'ok');
   }
   ['btnPng', 'btnPng2'].forEach(function (id) { $(id).addEventListener('click', doPNG); });
   ['btnSvg', 'btnSvg2'].forEach(function (id) { $(id).addEventListener('click', doSVG); });
@@ -1584,7 +1584,7 @@
     var payload = M.serializeProject(state);
     var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
     window.CatChart.download(blob, 'CatPlot_项目_' + stamp() + '.json');
-    toast('项目 JSON 已导出（catplot-project v2：原始/工作副本、背景、峰表、历史、参考轨道与已选物相）。', 'ok');
+    toast('项目 JSON 已导出。', 'ok');
   });
   $('btnRestoreProject').addEventListener('click', function () { $('projectInput').click(); });
   $('projectInput').addEventListener('change', function () {

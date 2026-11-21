@@ -111,7 +111,7 @@
     $('matchPhaseList').querySelectorAll('[data-mphdel]').forEach(function (b) {
       b.addEventListener('click', function () { ui.phases.splice(+this.getAttribute('data-mphdel'), 1); MS().phases = ui.phases; renderPhases(); App.save(); });
     });
-    $('matchCoverage').textContent = '实验峰 ' + exp.length + ' · 已解释 ' + cov.covered.length + ' · 重叠证据 ' + cov.overlap.length + ' · 剩余未解释 ' + cov.remaining.length + '。覆盖按峰位跨轮对齐；重叠峰不自动归属。';
+    $('matchCoverage').textContent = '实验峰 ' + exp.length + ' · 已解释 ' + cov.covered.length + ' · 重叠 ' + cov.overlap.length + ' · 剩余未解释 ' + cov.remaining.length;
     $('btnMatchRemaining').disabled = !cov.remaining.length;
     ui.remaining = cov.remaining;
   }

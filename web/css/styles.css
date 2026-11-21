@@ -1,25 +1,25 @@
 /* CatPlot — 衍射仪控制台风格：深色机身 + 白色出版级图纸 */
 
 :root {
-  --site-bg: #0d1321;
-  --site-fg: #e8edf6;
-  --site-accent: #38bdf8;
-  --site-on-accent: #06202e;
-  --site-surface: #151d30;
-  --site-muted: #8fa0bb;
-  --site-border: #26334d;
+  --site-bg: #10141c;
+  --site-fg: #dfe6f0;
+  --site-accent: #5eb3e4;
+  --site-on-accent: #0d1a24;
+  --site-surface: #171c26;
+  --site-muted: #8794a8;
+  --site-border: #242c3d;
   --site-font: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, -apple-system, sans-serif;
-  --site-radius: 10px;
+  --site-radius: 7px;
   --site-space: 1;
   --site-type: 1;
   --site-motion: 1;
 
-  --amber: #fbbf24;
-  --danger: #f87171;
-  --ok: #34d399;
+  --amber: #e8b64c;
+  --danger: #e06c6c;
+  --ok: #5cc9a7;
   --paper: #ffffff;
-  --surface-2: #1b2540;
-  --accent-soft: rgba(56, 189, 248, 0.12);
+  --surface-2: #1d2432;
+  --accent-soft: rgba(94, 179, 228, 0.12);
 }
 
 * { box-sizing: border-box; }
@@ -30,10 +30,7 @@ body {
   font-family: var(--site-font);
   font-size: calc(14px * var(--site-type));
   color: var(--site-fg);
-  background:
-    radial-gradient(1100px 500px at 85% -10%, rgba(56, 189, 248, 0.09), transparent 60%),
-    radial-gradient(900px 480px at -10% 110%, rgba(251, 191, 36, 0.06), transparent 60%),
-    var(--site-bg);
+  background: var(--site-bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -59,9 +56,7 @@ body {
   row-gap: 8px;
   padding: calc(10px * var(--site-space)) calc(18px * var(--site-space));
   border-bottom: 1px solid var(--site-border);
-  background:
-    repeating-linear-gradient(90deg, transparent 0 3px, rgba(56, 189, 248, 0.025) 3px 4px),
-    linear-gradient(180deg, var(--surface-2), var(--site-surface));
+  background: var(--site-surface);
   flex: none;
 }
 .brand { display: flex; align-items: center; gap: calc(10px * var(--site-space)); min-width: 0; }
@@ -97,21 +92,21 @@ body {
   transition: background calc(160ms * var(--site-motion)), border-color calc(160ms * var(--site-motion)), transform calc(120ms * var(--site-motion));
   white-space: nowrap;
 }
-.btn:hover { border-color: var(--site-accent); background: #202c4e; }
-.btn:active { transform: translateY(1px); }
+.btn:hover { border-color: #3a4760; background: #202838; }
+.btn:active { background: #242d40; }
 .btn.primary {
   background: var(--site-accent);
   border-color: var(--site-accent);
   color: var(--site-on-accent);
   font-weight: 600;
 }
-.btn.primary:hover { background: #5ccbfa; }
+.btn.primary:hover { background: #72bfe9; border-color: #72bfe9; }
 .btn.ghost { background: transparent; }
 .btn.small { padding: calc(4px * var(--site-space)) calc(10px * var(--site-space)); font-size: calc(12px * var(--site-type)); }
 .btn.block { display: block; width: 100%; }
-.btn.danger { color: var(--danger); border-color: rgba(248, 113, 113, 0.4); background: transparent; }
-.btn.danger:hover { background: rgba(248, 113, 113, 0.12); border-color: var(--danger); }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.btn.danger { color: var(--danger); border-color: rgba(224, 108, 108, 0.4); background: transparent; }
+.btn.danger:hover { background: rgba(224, 108, 108, 0.1); border-color: var(--danger); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .icon-btn {
   background: transparent; border: none; color: var(--site-muted);
   font-size: 15px; cursor: pointer; padding: 6px; border-radius: var(--site-radius);
@@ -280,8 +275,9 @@ input[type="color"] {
 .settings-section { padding: calc(14px * var(--site-space)); border-bottom: 1px solid var(--site-border); display: grid; gap: calc(10px * var(--site-space)); }
 .settings-section:last-child { border-bottom: none; }
 .settings-section h3 {
-  margin: 0; font-size: calc(12.5px * var(--site-type)); letter-spacing: 2px;
-  color: var(--site-accent); text-transform: uppercase;
+  margin: 0; font-size: calc(12.5px * var(--site-type)); font-weight: 600;
+  color: var(--site-fg); letter-spacing: 0.3px;
+  padding-left: 8px; border-left: 2px solid var(--site-accent);
 }
 .field { display: grid; gap: 5px; font-size: calc(12px * var(--site-type)); color: var(--site-muted); min-width: 0; }
 .field output { color: var(--site-fg); font-weight: 600; }

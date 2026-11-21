@@ -190,11 +190,11 @@
     var maxPts = Math.max.apply(null, series.map(function (s) { return s.pts.length; }));
     var note;
     if (maxPts < 2) {
-      note = '锚峰观测不足（最多 ' + maxPts + ' 个样品），不足以构成趋势。原因：各样品在此区间不含同一物相峰，或峰位漂移超出容差（' + f(a.tol, 2) + '°）——不同峰不会被硬连成趋势。请增大容差、改选含共同峰的区间，或换用同一物相的梯度系列样品（如掺杂/温度系列）。';
+      note = '该锚峰仅 ' + maxPts + ' 个样品有观测，不足以构成趋势：峰位漂移可能超出容差（' + f(a.tol, 2) + '°）。可增大容差、换区间，或改用同一物相的梯度系列样品。';
     } else if (metric === 'D') {
-      note = '晶粒尺寸由 Scherrer 公式估算，为表观值；未扣仪器宽化时系统性偏小。多峰同图建议勾选"相对首样品偏移"。';
+      note = 'Scherrer 表观值；多峰同图建议勾选"相对首样品偏移"。';
     } else {
-      note = '趋势基于跨样品峰对齐（容差 ' + f(a.tol, 2) + '°，参考样品 ' + esc(a.refName || '') + '）；多峰样品各锚峰独立成系列；面积占比非物相含量。';
+      note = '容差 ' + f(a.tol, 2) + '° · 参考 ' + esc(a.refName || '') + ' · 面积占比非物相含量。';
     }
     $('batchTrendNote').textContent = note;
     $('batchTrendNote').className = 'hint ' + (maxPts < 2 ? 'mt-warn' : '');
