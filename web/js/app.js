@@ -83,9 +83,17 @@
   function hideToast() { $('toast').hidden = true; clearTimeout(toastTimer); }
 
   /* ---------- 三层数据：raw 只读 / 分析 = 工作副本 − 已确认背景 + 归一化 / 显示 = 分析 + 偏移 ---------- */
+  function bgName(bg) {
+    if (!bg) return '无';
+    if (bg.mode === 'snip') return 'SNIP(' + bg.iterations + ')';
+    if (bg.mode === 'shirley') return 'Shirley(' + bg.iterations + ')';
+    if (bg.mode === 'manual') return '手动(' + bg.points.length + '点)';
+    return '无';
+  }
   function computeBgY(s) {
     if (!s.bg || s.bg.mode === 'none') return null;
     if (s.bg.mode === 'snip') return AN.snipBackground(s.working.y, s.bg.iterations);
+    if (s.bg.mode === 'shirley') return AN.shirleyBackground(s.working.y, s.bg.iterations);
     if (s.bg.mode === 'manual') return AN.manualBackground(s.working.x, s.bg.points);
     return null;
   }
@@ -108,7 +116,7 @@
     s.xExtent = [M.minOf(s.display.x), M.maxOf(s.display.x)];
     s.q = M.buildQueryIndex(s.display.x);
     var parts = [];
-    if (s.bg && s.bg.applied) parts.push(s.bg.mode === 'snip' ? '背景扣除SNIP(' + s.bg.iterations + ')' : '背景扣除手动(' + s.bg.points.length + '点)');
+    if (s.bg && s.bg.applied) parts.push('背景扣除' + bgName(s.bg));
     parts.push(s.normalize ? '归一化(最强峰=1)' : '无归一化');
     s.processDesc = parts.join(' + ');
     return blocked;
@@ -502,7 +510,7 @@
     var s = getSelected();
     var notes = [];
     if (s) {
-      if (s.bg && s.bg.applied) notes.push('背景: ' + (s.bg.mode === 'snip' ? 'SNIP(' + s.bg.iterations + '次迭代) 已扣除' : '手动 ' + s.bg.points.length + ' 点已扣除') + ' · 样品「' + s.name + '」');
+      if (s.bg && s.bg.applied) notes.push('背景: ' + bgName(s.bg) + ' 已扣除 · 样品「' + s.name + '」');
       else if (s.bg && s.bg.mode !== 'none' && s.bg.preview) notes.push('背景: 预览中（未扣除）· 样品「' + s.name + '」');
       if (s.peaks && s.peaks.list.length) {
         notes.push('实验峰 ' + s.peaks.list.length + ' 个' + (peaksStale(s) ? '（上游已改变，待更新）' : '') + ' · 寻峰输入=工作副本−已确认背景');
@@ -609,7 +617,7 @@
       ['分析最大值', window.CatChart.fmtNum(M.maxOf(s.analysis.y))],
       ['显示最大值', window.CatChart.fmtNum(M.maxOf(s.display.y))],
       ['显示点数', (function () { var v = viewOf(s); return v ? v.kept + (v.mode === 'dec' ? '（窗口 ' + v.inWindow + ' 点降采样）' : '（全量）') : '未显示'; })()],
-      ['背景', s.bg && s.bg.applied ? (s.bg.mode === 'snip' ? 'SNIP(' + s.bg.iterations + ') 已扣除' : '手动 ' + s.bg.points.length + ' 点已扣除') : (s.bg && s.bg.mode !== 'none' ? '预览中（未扣除）' : '无')],
+      ['背景', s.bg && s.bg.applied ? bgName(s.bg) + ' 已扣除' : (s.bg && s.bg.mode !== 'none' ? '预览中（未扣除）' : '无')],
       ['实验峰', s.peaks ? s.peaks.list.length + (peaksStale(s) ? '（待更新）' : '') : '0'],
       ['来源', s.source === 'sim' ? '内置模拟数据' : ((s.importMeta && s.importMeta.fileName) || '上传文件')]
     ];
@@ -714,8 +722,11 @@
   var DT_PANES = { peaks: 'dtPeaks', phases: 'dtPhases', tracks: 'dtTracks' };
   function setTechnique(id) {
     state.technique = (window.CatModel.TECHNIQUES[id] ? id : 'xrd');
+    /* 未设背景的样品套用该表征推荐背景（XPS→Shirley 等），已设的不覆盖 */
+    var rec = window.CatModel.guide(state.technique).bg;
+    state.samples.forEach(function (s) { if (s.bg && s.bg.mode === 'none') { s.bg.mode = rec; s.bg.preview = true; } });
     renderAll(); save();
-    toast('已切换表征：' + window.CatModel.tech(state.technique).name, 'ok');
+    toast('已切换表征：' + window.CatModel.tech(state.technique).name + '（推荐背景 ' + rec + '）', 'ok');
   }
   function setTool(t) {
     if (t === 'match' && state.technique !== 'xrd') { toast('物相匹配仅 XRD 表征可用', 'err'); t = 'display'; }
@@ -973,7 +984,7 @@
       box.appendChild(row);
     });
     var st = $('bgStatus');
-    if (s.bg.applied) st.textContent = '已扣除：分析层 = 工作副本 − 背景' + (s.bg.mode === 'snip' ? '（SNIP ' + s.bg.iterations + ' 次迭代）' : '（' + s.bg.points.length + ' 个手动点）') + '。原始数据未改动；峰表如基于旧背景将标为待更新。';
+    if (s.bg.applied) st.textContent = '已扣除：分析层 = 工作副本 − 背景（' + bgName(s.bg) + '）。原始数据未改动；峰表如基于旧背景将标为待更新。';
     else if (s.bg.mode !== 'none') st.textContent = '预览中（未扣除）：橙色虚线为估计背景。确认扣除后才进入分析层。';
     else st.textContent = '未设置背景。选择 SNIP 自动估计或手动背景点。';
   }
@@ -1000,7 +1011,7 @@
     var s = getSelected(); if (!s) return;
     if (s.bg.mode === 'none') { toast('请先选择背景方式。', 'err'); return; }
     if (s.bg.mode === 'manual' && s.bg.points.length < 2) { toast('手动背景至少需要 2 个背景点。', 'err'); return; }
-    checkpoint('确认背景扣除（' + (s.bg.mode === 'snip' ? 'SNIP ' + s.bg.iterations : '手动 ' + s.bg.points.length + ' 点') + '，' + s.name + '）');
+    checkpoint('确认背景扣除（' + bgName(s.bg) + '，' + s.name + '）');
     s.bg.applied = true;
     renderAll();
     toast('背景已扣除。原始数据保留，可用「恢复原始」或撤销回退。', 'ok');

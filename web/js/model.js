@@ -227,7 +227,7 @@
   function validateBg(bg, label, errors) {
     if (bg == null) return;
     if (typeof bg !== 'object') { errors.push(label + '.bg 必须是对象'); return; }
-    if (['none', 'snip', 'manual'].indexOf(bg.mode) === -1) errors.push(label + '.bg.mode 必须是 none/snip/manual');
+    if (['none', 'snip', 'shirley', 'manual'].indexOf(bg.mode) === -1) errors.push(label + '.bg.mode 必须是 none/snip/shirley/manual');
     if (!isFiniteNum(bg.iterations) || bg.iterations < 1 || bg.iterations > 500) errors.push(label + '.bg.iterations 必须在 1–500');
     if (typeof bg.applied !== 'boolean' || typeof bg.preview !== 'boolean') errors.push(label + '.bg.applied/preview 必须是布尔值');
     if (!Array.isArray(bg.points)) errors.push(label + '.bg.points 必须是数组');
@@ -490,6 +490,15 @@
   };
   function tech(id) { return TECHNIQUES[id] || TECHNIQUES.xrd; }
 
+  /* 每表征推荐分析流程（简单：扣背景→寻峰→分峰→峰面积/比），含科学口径与默认背景 */
+  var GUIDE = {
+    xrd:   { bg: 'snip',    steps: '扣背景(SNIP/手动) → 寻峰 → 分峰拟合 → 峰面积/FWHM → Scherrer 晶粒尺寸 / 卡片对照', note: '面积占比非物相含量；Scherrer 为表观值。' },
+    raman: { bg: 'snip',    steps: '扣荧光背底(SNIP/手动) → 寻峰 → 分峰(如 D/G/2D) → 峰面积比 ID/IG、峰位偏移', note: 'ID/IG 为面积比，反映缺陷/石墨化程度，非绝对含量。' },
+    ftir:  { bg: 'manual',  steps: '基线校正(手动/自动) → 寻峰 → 分峰(官能团区) → 峰面积相对占比(如 C=O/C–O)', note: '面积为相对占比，非绝对浓度；基线影响面积，需统一方法。' },
+    xps:   { bg: 'shirley', steps: 'Shirley 背底扣除 → 寻峰 → 分峰(化学态) → 峰面积相对占比', note: '面积为化学态相对占比；绝对定量需灵敏度因子，本工具不做。' }
+  };
+  function guide(id) { return GUIDE[id] || GUIDE.xrd; }
+
   window.CatModel = {
     maxOf: maxOf, minOf: minOf,
     canNormalize: canNormalize, normalizeBlockReason: normalizeBlockReason,
@@ -501,6 +510,6 @@
     defaultBg: defaultBg, defaultPeakParams: defaultPeakParams, defaultPeaks: defaultPeaks,
     validateBg: validateBg, validatePeaks: validatePeaks,
     validateProject: validateProject, serializeProject: serializeProject,
-    TECHNIQUES: TECHNIQUES, tech: tech
+    TECHNIQUES: TECHNIQUES, tech: tech, GUIDE: GUIDE, guide: guide
   };
 })();

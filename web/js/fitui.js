@@ -112,15 +112,40 @@
         '</tr>';
     }).join('') || '<tr><td colspan="5" class="hint">无峰：生成候选峰或手动加峰</td></tr>';
   }
+  function renderGuide() {
+    var g = window.CatModel.guide(App.state.technique);
+    var el = $('fitGuide');
+    if (el) el.textContent = '推荐流程（' + window.CatModel.tech(App.state.technique).name + '）：' + g.steps + '。' + g.note;
+  }
+  function renderAreaRatio(res) {
+    var a = $('fitRatioA'), b = $('fitRatioB'), out = $('fitRatioOut');
+    if (!a || !b || !out) return;
+    if (!res || !res.params || res.params.length < 2) { a.innerHTML = ''; b.innerHTML = ''; out.textContent = '需≥2个拟合峰。'; return; }
+    var opts = res.params.map(function (p, i) { return '<option value="' + i + '">峰' + (i + 1) + ' @' + f(p.c, 1) + '</option>'; }).join('');
+    var av = a.value, bv = b.value;
+    a.innerHTML = opts; b.innerHTML = opts;
+    a.value = av && av < res.params.length ? av : 0;
+    b.value = bv && bv < res.params.length ? bv : 1;
+    function upd() {
+      var i = +a.value, j = +b.value;
+      var A = res.params[i], B = res.params[j];
+      if (!A || !B || !B.area) { out.textContent = '—'; return; }
+      out.textContent = '面积比 A/B = ' + f(A.area / B.area, 3) + '（A=' + f(A.area, 1) + ', B=' + f(B.area, 1) + '）· 相对占比，非绝对含量';
+    }
+    a.onchange = upd; b.onchange = upd; upd();
+  }
   function renderResults() {
     var r = region(), q = $('fitQuality'), pt = $('fitParamTable'), sc = $('fitScherrerTable'), cc = $('fitCardTable');
+    renderGuide();
     if (!r || !r.result) {
       q.textContent = '尚未拟合：设置区间/背景/峰型/初值后运行。';
       pt.innerHTML = ''; sc.innerHTML = ''; cc.innerHTML = '';
       $('fitScherrerWarn').hidden = true;
+      renderAreaRatio(null);
       return;
     }
     var res = r.result, Q = res.quality;
+    renderAreaRatio(res);
     var T = (window.CatModel && window.CatModel.tech) ? window.CatModel.tech(App.state.technique) : { xrd: true, xLabel: '2θ (°)', xUnit: '°' };
     q.innerHTML = 'Rwp=<b>' + f(Q.rwp, 4) + '</b> · Rp=' + f(Q.rp, 4) + ' · χ²(red)=' + f(Q.chi2red, 3) + ' · 数据点 ' + Q.n + ' · 自由参数 ' + Q.freeParams + ' · 迭代 ' + res.iterations + ' · ' + esc(res.note || '');
     var totArea = res.params.reduce(function (a, p) { return a + p.area; }, 0) || 1;

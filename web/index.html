@@ -236,7 +236,8 @@
           <label class="field"><span>背景方式</span>
             <select id="bgMode">
               <option value="none">无背景</option>
-              <option value="snip">SNIP 自动估计</option>
+              <option value="snip">SNIP 自动估计（荧光/缓变背底）</option>
+              <option value="shirley">Shirley（XPS 非弹性背底）</option>
               <option value="manual">手动背景点（线性插值）</option>
             </select>
           </label>
@@ -298,6 +299,7 @@
     <div id="toolFit" class="tool-pane" hidden>
       <section class="settings-section">
         <h3>峰拟合 · 选区多峰拟合（fit-1）</h3>
+        <p class="hint" id="fitGuide"></p>
         <p class="hint" id="fitScope">做：选区背景扣除 + 多峰拟合 + 峰参数 + 质量评估 + 表观晶粒尺寸。不做：全谱 Rietveld 精修、物相定量（RIR/内标）、峰面积→质量分数、结构精修。峰面积占比仅标注为「峰面积相对占比，非物相含量」。</p>
         <p class="hint mt-warn" id="fitNormWarn" hidden></p>
         <p class="hint" id="fitV3Note" hidden>项目为 v3 存档：不含拟合结果。运行拟合并保存后自动升级为 v4（旧项目仍可打开）。</p>
@@ -346,6 +348,15 @@
         </div>
         <p class="hint mt-warn" id="fitScherrerWarn" hidden>表观值，未扣除仪器宽化，系统性偏小。Scherrer 适用约 1–100 nm；忽略应变宽化；不与 TEM 粒径等价。</p>
         <div class="table-scroll fit-scroll" id="fitScherrerTable"></div>
+      </section>
+      <section class="settings-section">
+        <h3>分峰面积比（相对占比，非绝对含量）</h3>
+        <p class="hint">选两个拟合峰计算面积比（如拉曼 ID/IG、XPS 化学态比、红外官能团比）。面积为相对占比。</p>
+        <div class="field-row">
+          <label class="field"><span>峰 A</span><select id="fitRatioA" class="input"></select></label>
+          <label class="field"><span>峰 B</span><select id="fitRatioB" class="input"></select></label>
+        </div>
+        <p class="hint process-note" id="fitRatioOut"></p>
       </section>
       <section class="settings-section">
         <h3>卡片峰表对照（拟合峰 ↔ 参考卡）</h3>

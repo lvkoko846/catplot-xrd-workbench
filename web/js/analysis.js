@@ -172,8 +172,33 @@
     return n + ':' + (h >>> 0).toString(16) + ':' + Math.round(sum * 100) + ':' + b;
   }
 
+  /* Shirley 背景（XPS 标准）：背底正比于左侧累积峰面积（非弹性散射电子出现在更高结合能侧）。
+     B(i)=y0+(yN-y0)*Q_left(i)/Q(total)，端点贴合谱两端；迭代至收敛。
+     假设谱端点为纯背底；适合 XPS 单峰/窄区，宽区或多峰需谨慎。不修改输入。 */
+  function shirleyBackground(y, iterations) {
+    var n = y.length;
+    if (n < 3) return y.slice();
+    var its = Math.max(1, Math.min(200, Math.floor(iterations || 50)));
+    var B = new Array(n).fill(0);
+    var y0 = y[0], yN = y[n - 1];
+    for (var it = 0; it < its; it++) {
+      var Q = new Array(n).fill(0);
+      var acc = 0;
+      for (var i = 0; i < n; i++) { Q[i] = acc; var s = y[i] - B[i]; acc += s > 0 ? s : 0; }
+      var Qt = acc || 1;
+      var maxDiff = 0;
+      for (var j = 0; j < n; j++) {
+        var nb = y0 + (yN - y0) * (Q[j] / Qt);
+        var d = Math.abs(nb - B[j]); if (d > maxDiff) maxDiff = d;
+        B[j] = nb;
+      }
+      if (maxDiff < 1e-6 * (Math.abs(y0) + Math.abs(yN) + 1)) break;
+    }
+    return B;
+  }
+
   window.CatAnalysis = {
-    snipBackground: snipBackground, manualBackground: manualBackground,
+    snipBackground: snipBackground, shirleyBackground: shirleyBackground, manualBackground: manualBackground,
     sgSmooth: sgSmooth, estimateNoise: estimateNoise, refineCenter: refineCenter,
     findPeaks: findPeaks, dSpacing: dSpacing, basisKey: basisKey
   };

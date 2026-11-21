@@ -94,8 +94,62 @@ r = await ev(ws, `(async () => { ${HELP}
 })()`);
 ok(r.tech === 'xrd' && r.matchVisible && r.x2t, 'TC5 切回XRD恢复match+2θ轴', r);
 
-/* TC6 零控制台错误 */
-ok(consoleErrors.length === 0, 'TC6 全程零控制台错误', consoleErrors.slice(0, 3));
+/* TC6 XPS：切换自动套用 Shirley 推荐背景 + 扣除生效（背底左高右低单调） */
+r = await ev(ws, `(async () => { ${HELP}
+  function grid(a,b,s){const x=[];for(let v=a;v<=b+1e-9;v+=s)x.push(+v.toFixed(4));return x;}
+  const x = grid(278, 292, 0.05);
+  const y = x.map(v => 800 + (v - 278) * 60 + 8000*Math.exp(-4*Math.LN2*Math.pow((v-284.8)/1.2,2)) + 2500*Math.exp(-4*Math.LN2*Math.pow((v-286.3)/1.3,2)));
+  CatApp.state.samples = [{ id:'xp', name:'C1s', color:'#2563eb', lineWidth:1.5, visible:true, offset:0, normalize:false, source:'sim',
+    raw:{x,y,lineNos:x.map((_,i)=>i+1)}, working:{x,y:y.slice(),lineNos:x.map((_,i)=>i+1)},
+    peaks:{params:{smooth:9,noiseK:3,minHeight:null,minProm:0,minDist:0.15,lo:null,hi:null},list:[],basisKey:null,sigma:null},
+    bg:{mode:'none',iterations:24,points:[],applied:false,preview:true} }];
+  CatApp.state.selectedId='xp';
+  $('techSelect').value='xps'; $('techSelect').dispatchEvent(new Event('change')); await sleep(300);
+  const s = CatApp.getSelected();
+  const autoMode = s.bg.mode;
+  s.bg.iterations = 50; CatApp.renderAll(); await sleep(200);
+  document.querySelector('.tool-tab[data-tool="bg"]').click(); await sleep(200);
+  $('btnBgApply').click(); await sleep(300);
+  const applied = s.bg.applied;
+  const b = s.bgY || [];
+  const mono = b.length ? b.every((v,i)=>i===0||v>=b[i-1]-1e-6) : false;
+  return { autoMode, applied, bgLen: b.length, mono, bgLeft: b.length?+b[0].toFixed(0):null, bgRight: b.length?+b[b.length-1].toFixed(0):null };
+})()`);
+ok(r.autoMode === 'shirley' && r.applied && r.mono && r.bgLeft < r.bgRight, 'TC6 XPS自动套用Shirley+扣除生效（背底左低右高单调，端点贴合谱端）', r);
+
+/* TC6b XPS 双峰拟合 + 面积比 + XPS 指南文案 */
+r = await ev(ws, `(async () => { ${HELP}
+  document.querySelector('.tool-tab[data-tool="fit"]').click(); await sleep(250);
+  $('fitRMin').value='282'; $('fitRMax').value='288'; $('btnFitAddRegion').click(); await sleep(150);
+  $('btnFitInitPeaks').click(); await sleep(250);
+  const rg = CatApp.state.fit.regions.find(x=>x.id===CatApp.state.fit.active);
+  rg.peaks.push({ c: 286.3, w: 0.6, h: 1500, sp: 0.5, locks: {} });
+  CatFitUI.refresh(); await sleep(100);
+  $('btnFitRun').click();
+  const t0=Date.now(); while(CatFitUI.ui.running && Date.now()-t0<15000) await sleep(60); await sleep(250);
+  const res = rg.result;
+  const guide = $('fitGuide').textContent;
+  const ratioTxt = $('fitRatioOut').textContent;
+  const ratioSel = $('fitRatioA').options.length;
+  return { ok: !!(res && res.ok !== false), nPeaks: res ? res.params.length : 0,
+    guideXps: guide.includes('Shirley') && guide.includes('化学态'), ratioHasVal: /面积比 A\\/B = [0-9.]+/.test(ratioTxt), ratioSel };
+})()`);
+ok(r.ok && r.nPeaks >= 2 && r.guideXps && r.ratioHasVal && r.ratioSel >= 2, 'TC6b XPS双峰拟合+面积比+XPS指南', r);
+
+/* TC6c 拉曼指南含 ID/IG+荧光；红外指南含基线+官能团 */
+r = await ev(ws, `(async () => { ${HELP}
+  $('techSelect').value='raman'; $('techSelect').dispatchEvent(new Event('change')); await sleep(250);
+  document.querySelector('.tool-tab[data-tool="fit"]').click(); await sleep(200);
+  const ramanGuide = $('fitGuide').textContent;
+  $('techSelect').value='ftir'; $('techSelect').dispatchEvent(new Event('change')); await sleep(250);
+  const ftirGuide = $('fitGuide').textContent;
+  return { ramanOk: ramanGuide.includes('ID/IG') && ramanGuide.includes('荧光'),
+    ftirOk: ftirGuide.includes('基线') && ftirGuide.includes('官能团') };
+})()`);
+ok(r.ramanOk && r.ftirOk, 'TC6c 拉曼指南(ID/IG+荧光背底)+红外指南(基线+官能团)', r);
+
+/* TC7 零控制台错误 */
+ok(consoleErrors.length === 0, 'TC7 全程零控制台错误', consoleErrors.slice(0, 3));
 
 console.log('== 多表征验收汇总 == 通过 ' + pass + ' / ' + (pass + fail));
 ws.close(); chrome.kill();
