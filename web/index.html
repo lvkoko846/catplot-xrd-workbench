@@ -6,7 +6,7 @@
 <title>CatPlot · XRD 分析工作台</title>
 <meta name="description" content="面向催化方向研究生的 XRD 分析工作台：本地导入、背景扣除、寻峰、参考卡片轨道对比、峰表导出与项目保存。数据仅存于本机浏览器。">
 <link rel="stylesheet" href="css/styles.css">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d1321'/%3E%3Cpath d='M4 26 L9 24 L12 10 L15 24 L18 18 L21 6 L24 24 L28 22' fill='none' stroke='%2338bdf8' stroke-width='2.4' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23171c26'/%3E%3Cpath d='M4 26 L9 24 L12 10 L15 24 L18 18 L21 6 L24 24 L28 22' fill='none' stroke='%235eb3e4' stroke-width='2.4' stroke-linejoin='round'/%3E%3C/svg%3E">
 </head>
 <body>
 
@@ -19,14 +19,14 @@
     </svg>
     <div class="brand-text">
       <h1>CatPlot</h1>
-      <span>XRD 分析工作台 · 本地处理</span>
+      <span>多表征分析工作台 · 本地处理</span>
     </div>
   </div>
 
   <div class="tb-group" role="group" aria-label="文件">
     <button id="btnUploadTop" class="btn primary small" type="button">导入数据</button>
     <button id="btnSampleTop" class="btn ghost small" type="button" title="程序生成的模拟数据，仅供演示">模拟示例</button>
-    <button id="btnExportProject" class="btn ghost small" type="button" title="导出项目 JSON（v2，含背景/峰表/历史/物相）">保存项目</button>
+    <button id="btnExportProject" class="btn ghost small" type="button" title="导出项目 JSON（含背景/峰表/拟合/历史/物相）">保存项目</button>
     <button id="btnRestoreProject" class="btn ghost small" type="button">恢复项目</button>
     <input type="file" id="fileInput" accept=".csv,.txt,.tsv,.dat,text/csv,text/plain" multiple hidden>
     <input type="file" id="projectInput" accept=".json,application/json" hidden>
