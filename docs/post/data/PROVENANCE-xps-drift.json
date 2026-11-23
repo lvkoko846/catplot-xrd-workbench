@@ -1,0 +1,11 @@
+{
+ "source": "Zenodo record 15180744 (CC BY 4.0)",
+ "title": "Low-temperature oxidation of hexagonal boron nitride during oxidative dehydrogenation",
+ "url": "https://zenodo.org/records/15180744",
+ "files": [
+  "XPS/dif reactor geometry/VS-1.5/C 1s.TXT",
+  "XPS/dif reactor geometry/VS-1.5/B 1s.TXT",
+  "DRIFT spectra/spent h-BN.txt"
+ ],
+ "citation": "See Zenodo record 15180744 authors; CC BY 4.0"
+}
