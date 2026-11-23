@@ -141,13 +141,39 @@
       s.pts = s.an.points.filter(function (p) { var v = M.get(p); return v != null && isFinite(v); });
       s.base = s.pts.length ? M.get(s.pts[0]) : 0;
       s.val = function (p) { return relOn ? M.get(p) - s.base : M.get(p); };
+      s.se = function (p) { var v = metric === 'c' ? p.seC : metric === 'w' ? p.seW : null; return v != null && isFinite(v) ? v : null; };
     });
     var allPts = []; series.forEach(function (s) { allPts = allPts.concat(s.pts); });
     var W = 960, H = 420, mL = 70, mR = 30, mT = 30, mB = 60, pw = W - mL - mR, ph = H - mT - mB;
     if (!allPts.length) { svg.innerHTML = '<text x="480" y="210" text-anchor="middle" fill="#94a3b8" font-size="16">该指标无有效数据</text>'; return; }
+    /* 回归（开关开启且 n≥2）+ 误差棒数据 */
+    var regOn = $('batchReg') && $('batchReg').checked;
+    var errOn = $('batchErr') && $('batchErr').checked;
+    var regs = [];
+    series.forEach(function (s) {
+      s.reg = null;
+      if (regOn && s.pts.length >= 2) {
+        var rx = s.pts.map(function (p) { return p.xValue; });
+        var ry = s.pts.map(function (p) { return s.val(p); });
+        var g = Batch.linearRegression(rx, ry);
+        if (g.ok) { s.reg = g; regs.push({ label: s.an.label, ref: s.an.ref, metric: M.label, n: g.n, slope: g.slope, slopeSe: g.slopeSe, intercept: g.intercept, r2: g.r2, note: g.note }); }
+      }
+    });
+    ui.regs = regs;
     var xs = allPts.map(function (p) { return p.xValue; });
-    var ys = []; series.forEach(function (s) { s.pts.forEach(function (p) { ys.push(s.val(p)); }); });
+    var ys = []; series.forEach(function (s) { s.pts.forEach(function (p) {
+      var v = s.val(p); ys.push(v);
+      if (errOn) { var e = s.se(p); if (e != null) { ys.push(v - e); ys.push(v + e); } }
+    }); });
     var xMin = Math.min.apply(null, xs), xMax = Math.max.apply(null, xs); if (xMax === xMin) { xMin -= 1; xMax += 1; }
+    /* 置信带纳入 y 域 */
+    if (regOn) series.forEach(function (s) {
+      if (!s.reg) return;
+      [xMin, xMax].forEach(function (xv) {
+        var ln = Batch.regressionLine(s.reg, xv, xv, 2);
+        ys.push(ln.p0.hi); ys.push(ln.p0.lo);
+      });
+    });
     var yMin = Math.min.apply(null, ys), yMax = Math.max.apply(null, ys); var pad = (yMax - yMin) * 0.1 || Math.abs(yMax) * 0.1 || 1; yMin -= pad; yMax += pad;
     function X(v) { return mL + (v - xMin) / (xMax - xMin) * pw; }
     function Y(v) { return mT + ph - (v - yMin) / (yMax - yMin) * ph; }
@@ -166,19 +192,38 @@
     }
     parts.push('<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + (mT + ph) + '" stroke="#94a3b8"/>');
     parts.push('<line x1="' + mL + '" y1="' + (mT + ph) + '" x2="' + (W - mR) + '" y2="' + (mT + ph) + '" stroke="#94a3b8"/>');
-    /* 多系列折线 + 点 */
+    /* 每系列：置信带 → 回归线 → 误差棒 → 数据折线+点 */
     var legend = [];
     series.forEach(function (s) {
       var color = PALETTE[s.ci % PALETTE.length];
       var sorted = s.pts.slice().sort(function (p, q) { return p.xValue - q.xValue; });
-      if (sorted.length >= 2) {
+      if (regOn && s.reg) {
+        var ln = Batch.regressionLine(s.reg, xMin, xMax, 2);
+        var NS = 24, top = [], bot = [];
+        for (var q = 0; q <= NS; q++) {
+          var xq = xMin + (xMax - xMin) * q / NS;
+          top.push(X(xq).toFixed(1) + ' ' + Y(ln.at(xq) + ln.band(xq)).toFixed(1));
+          bot.unshift(X(xq).toFixed(1) + ' ' + Y(ln.at(xq) - ln.band(xq)).toFixed(1));
+        }
+        parts.push('<path d="M' + top.join(' L') + ' L' + bot.join(' L') + ' Z" fill="' + color + '" opacity="0.10" stroke="none"/>');
+        parts.push('<line x1="' + X(xMin).toFixed(1) + '" y1="' + Y(ln.at(xMin)).toFixed(1) + '" x2="' + X(xMax).toFixed(1) + '" y2="' + Y(ln.at(xMax)).toFixed(1) + '" stroke="' + color + '" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.85"/>');
+      }
+      if (errOn) sorted.forEach(function (p) {
+        var e = s.se(p); if (e == null) return;
+        var px = X(p.xValue).toFixed(1), v = s.val(p);
+        parts.push('<line x1="' + px + '" y1="' + Y(v - e).toFixed(1) + '" x2="' + px + '" y2="' + Y(v + e).toFixed(1) + '" stroke="' + color + '" stroke-width="1.2" opacity="0.7"/>');
+        parts.push('<line x1="' + (X(p.xValue) - 3).toFixed(1) + '" y1="' + Y(v - e).toFixed(1) + '" x2="' + (X(p.xValue) + 3).toFixed(1) + '" y2="' + Y(v - e).toFixed(1) + '" stroke="' + color + '" stroke-width="1.2" opacity="0.7"/>');
+        parts.push('<line x1="' + (X(p.xValue) - 3).toFixed(1) + '" y1="' + Y(v + e).toFixed(1) + '" x2="' + (X(p.xValue) + 3).toFixed(1) + '" y2="' + Y(v + e).toFixed(1) + '" stroke="' + color + '" stroke-width="1.2" opacity="0.7"/>');
+      });
+      if (sorted.length >= 2 && !(regOn && s.reg)) {
         var path = sorted.map(function (p, i) { return (i ? 'L' : 'M') + X(p.xValue).toFixed(1) + ' ' + Y(s.val(p)).toFixed(1); }).join(' ');
         parts.push('<path d="' + path + '" fill="none" stroke="' + color + '" stroke-width="2"/>');
       }
       sorted.forEach(function (p) {
-        parts.push('<circle cx="' + X(p.xValue).toFixed(1) + '" cy="' + Y(s.val(p)).toFixed(1) + '" r="4" fill="' + color + '"><title>' + esc(s.an.label) + ' · ' + esc(p.name) + '：' + f(s.val(p), 4) + '</title></circle>');
+        var e2 = s.se(p);
+        parts.push('<circle cx="' + X(p.xValue).toFixed(1) + '" cy="' + Y(s.val(p)).toFixed(1) + '" r="4" fill="' + color + '"><title>' + esc(s.an.label) + ' · ' + esc(p.name) + '：' + f(s.val(p), 4) + (e2 != null ? ' ±' + f(e2, 4) : '') + '</title></circle>');
       });
-      legend.push('<span class="fit-legend-item"><span class="batch-swatch" style="background:' + color + '"></span>' + esc(s.an.label) + ' @' + f(s.an.ref, 2) + '°（' + s.pts.length + '）</span>');
+      legend.push('<span class="fit-legend-item"><span class="batch-swatch" style="background:' + color + '"></span>' + esc(s.an.label) + ' @' + f(s.an.ref, 2) + '°（' + s.pts.length + '）' + (regOn && s.reg ? ' · 斜率 ' + f(s.reg.slope, 4) + (s.reg.slopeSe != null ? '±' + f(s.reg.slopeSe, 4) : '') + ' R²=' + f(s.reg.r2, 4) : '') + '</span>');
     });
     var xLabel = $('batchXMode').value === 'value' ? '组分值' : '样品序号';
     var yLabel = (relOn ? 'Δ' : '') + M.label + (relOn ? '（相对首样品）' : '');
@@ -198,6 +243,20 @@
     }
     $('batchTrendNote').textContent = note;
     $('batchTrendNote').className = 'hint ' + (maxPts < 2 ? 'mt-warn' : '');
+    renderRegTable();
+  }
+
+  /* ---------- 回归结果表 ---------- */
+  function renderRegTable() {
+    var box = $('batchRegTable');
+    if (!box) return;
+    var regs = ui.regs;
+    if (!regs || !regs.length) { box.innerHTML = ''; return; }
+    var xUnit = window.CatModel.tech(App.state.technique).xUnit;
+    box.innerHTML = '<h4 class="batch-subhead">线性回归（OLS，' + regs.length + ' 系列）</h4><div class="table-scroll fit-scroll"><table class="preview-table mt-table"><thead><tr><th>系列</th><th>指标</th><th>n</th><th>斜率 ± 标准误</th><th>截距</th><th>R²</th><th>说明</th></tr></thead><tbody>' +
+      regs.map(function (r) {
+        return '<tr><td>' + esc(r.label) + ' @' + f(r.ref, 2) + '°</td><td>' + esc(r.metric) + '</td><td>' + r.n + '</td><td>' + f(r.slope, 5) + (r.slopeSe != null ? ' ± ' + f(r.slopeSe, 5) : '') + '</td><td>' + f(r.intercept, 4) + '</td><td>' + f(r.r2, 4) + '</td><td class="hint">' + esc(r.note || '斜率单位：指标 / ' + xUnit + '（横轴）') + '</td></tr>';
+      }).join('') + '</tbody></table></div><p class="hint">斜率标准误来自拟合残差（n−2 自由度）；误差棒为单样品峰位/FWHM 拟合的 ±1σ。R² 低或斜率与标准误同量级时，线性趋势不成立。</p>';
   }
 
   /* ---------- 汇总表 ---------- */

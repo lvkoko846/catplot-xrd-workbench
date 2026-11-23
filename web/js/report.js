@@ -27,8 +27,13 @@
 
     /* 样品与溯源 */
     H.push('<section><h2>一、样品与数据来源</h2>');
-    H.push(table(['样品', '来源', '数据点', '归一化', '显示偏移'], (p.samples || []).map(function (s) {
-      return [s.name, s.source === 'sim' ? '模拟（演示）' : '上传（实验）', s.points, s.normalize ? '是' : '否', f(s.offset, 1)];
+    var anyCharge = (p.samples || []).some(function (s) { return s.charge; });
+    var head1 = ['样品', '来源', '数据点', '归一化', '显示偏移'];
+    if (anyCharge) head1.push('荷电校正');
+    H.push(table(head1, (p.samples || []).map(function (s) {
+      var row = [s.name, s.source === 'sim' ? '模拟（演示）' : '上传（实验）', s.points, s.normalize ? '是' : '否', f(s.offset, 1)];
+      if (anyCharge) row.push(s.charge ? ('−' + f(s.charge.shift, 2) + ' eV' + (s.charge.refMeasured != null ? '（' + (s.charge.refLabel || '参考峰') + ' ' + f(s.charge.refMeasured, 1) + '→' + f(s.charge.refTarget, 1) + '）' : '')) : '未校正');
+      return row;
     })));
     if (p.provenance && p.provenance.length) {
       H.push('<h3>参考/示例数据溯源</h3>');
@@ -100,7 +105,8 @@
       '<li>三层数据分离：raw（原始）/ working（分析）/ display（显示）；偏移与归一化仅显示，不参与拟合/寻峰/匹配。</li>' +
       '<li>峰拟合：Levenberg–Marquardt + 解析 Jacobian + 参数缩放；pseudo-Voigt 等峰型；背景联合优化；Rwp/Rp/χ² 全区间计算。</li>' +
       '<li>批量：逐样品 raw 层拟合，auto 多初值重试抗跨平台浮点差异；跨样品按参考峰位贪心对齐（容差内）。</li>' +
-      '<li>匹配：pm-2-lite 证据评分；一对一占用；确认闭环 covered 按峰位跨轮对齐。</li></ul></section>');
+      '<li>匹配：pm-2-lite 证据评分；一对一占用；确认闭环 covered 按峰位跨轮对齐。</li>' +
+      '<li>荷电校正（XPS）：以参考峰（如 C1s=284.8 eV）为基准整谱平移 X 轴，作用于分析/显示层，原始数据不变；基准选错会使化学态归属整体偏移。</li></ul></section>');
     H.push('<section><h2>七、未做 / 待核验（诚实清单）</h2><ul class="warn">' +
       (p.notDone || ['全谱 Rietveld 精修', '物相定量（RIR/内标）与峰面积→质量分数', '结构精修', '仪器宽化未提供时晶粒尺寸为表观值', '二进制/计算参考未经独立科学核验']).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') +
       (p.limitations || []).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></section>');

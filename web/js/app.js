@@ -105,17 +105,22 @@
       base = new Array(s.working.y.length);
       for (var i = 0; i < base.length; i++) base[i] = s.working.y[i] - s.bgY[i];
     }
-    s.corrected = { x: s.working.x.slice(), y: base };
+    /* 荷电校正（XPS）：整谱 X 轴平移，校正后坐标 = 原坐标 − shift。作用于 corrected/analysis/display；raw/working 不变。 */
+    var sh = (s.charge && isFinite(s.charge.shift)) ? s.charge.shift : 0;
+    var cx = new Array(s.working.x.length);
+    for (var j = 0; j < cx.length; j++) cx[j] = sh ? s.working.x[j] - sh : s.working.x[j];
+    s.corrected = { x: cx, y: base };
     if (s.normalize && !M.canNormalize(base)) {
       blocked = M.normalizeBlockReason(base);
       s.normalize = false;
     }
-    var layers = M.buildLayers({ x: s.working.x, y: base }, s.normalize, s.offset);
+    var layers = M.buildLayers({ x: s.working.x, y: base }, s.normalize, s.offset, sh);
     s.analysis = layers.analysis;
     s.display = layers.display;
     s.xExtent = [M.minOf(s.display.x), M.maxOf(s.display.x)];
     s.q = M.buildQueryIndex(s.display.x);
     var parts = [];
+    if (sh) parts.push('荷电校正(−' + M.formatNum(sh) + ')');
     if (s.bg && s.bg.applied) parts.push('背景扣除' + bgName(s.bg));
     parts.push(s.normalize ? '归一化(最强峰=1)' : '无归一化');
     s.processDesc = parts.join(' + ');
@@ -123,8 +128,13 @@
   }
   function recomputeAll() { state.samples.forEach(recomputeLayers); }
 
+  /* 峰表基线键：工作副本 + 背景 + 荷电位移。任一改变则旧峰表标为待更新。 */
+  function sampleBasisKey(s) {
+    var sh = (s.charge && s.charge.applied && isFinite(s.charge.shift)) ? s.charge.shift : 0;
+    return AN.basisKey(s.working, s.bg) + ':' + (sh ? 'c' + Math.round(sh * 1e6) : 'c0');
+  }
   function peaksStale(s) {
-    return !!(s.peaks && s.peaks.list.length && s.peaks.basisKey !== AN.basisKey(s.working, s.bg));
+    return !!(s.peaks && s.peaks.list.length && s.peaks.basisKey !== sampleBasisKey(s));
   }
 
   function makeSample(opts) {
@@ -142,7 +152,8 @@
       working: pointsToArrays(opts.workingPoints || opts.rawPoints),
       importMeta: opts.importMeta || null,
       bg: opts.bg || M.defaultBg(),
-      peaks: opts.peaks || M.defaultPeaks()
+      peaks: opts.peaks || M.defaultPeaks(),
+      charge: opts.charge || M.defaultCharge()
     };
     recomputeLayers(s);
     state.samples.push(s);
@@ -208,9 +219,9 @@
     var wLineNos = w.lineNos || (w.x.length === s.raw.x.length ? rawPts.map(function (p) { return p.lineNo; }) : null);
     if (!wLineNos) return null;
     var workPts = w.x.map(function (x, i) { return { x: x, y: w.y[i], lineNo: wLineNos[i] }; });
-    var bg = M.defaultBg(), peaks = M.defaultPeaks();
+    var bg = M.defaultBg(), peaks = M.defaultPeaks(), charge = M.defaultCharge();
     if (s.bg && typeof s.bg === 'object') {
-      bg.mode = ['none', 'snip', 'manual'].indexOf(s.bg.mode) !== -1 ? s.bg.mode : 'none';
+      bg.mode = ['none', 'snip', 'shirley', 'manual'].indexOf(s.bg.mode) !== -1 ? s.bg.mode : 'none';
       bg.iterations = s.bg.iterations > 0 ? Math.min(500, Math.round(s.bg.iterations)) : 24;
       bg.points = Array.isArray(s.bg.points) ? s.bg.points.filter(function (p) { return p && isFinite(p.x) && isFinite(p.y); }).map(function (p) { return { x: p.x, y: p.y }; }) : [];
       bg.applied = !!s.bg.applied && bg.mode !== 'none';
@@ -222,11 +233,19 @@
       peaks.basisKey = typeof s.peaks.basisKey === 'string' ? s.peaks.basisKey : null;
       peaks.sigma = isFinite(s.peaks.sigma) ? s.peaks.sigma : null;
     }
+    if (s.charge && typeof s.charge === 'object') {
+      charge.mode = ['none', 'manual', 'reference'].indexOf(s.charge.mode) !== -1 ? s.charge.mode : 'none';
+      charge.shift = isFinite(s.charge.shift) ? s.charge.shift : 0;
+      charge.refMeasured = isFinite(s.charge.refMeasured) ? s.charge.refMeasured : null;
+      charge.refTarget = isFinite(s.charge.refTarget) ? s.charge.refTarget : null;
+      charge.refLabel = typeof s.charge.refLabel === 'string' ? s.charge.refLabel : '';
+      charge.applied = !!s.charge.applied && charge.mode !== 'none';
+    }
     return {
       id: s.id || uid(), name: s.name, color: s.color, lineWidth: s.lineWidth, visible: s.visible,
       offset: s.offset, normalize: s.normalize, source: s.source, note: s.note || '',
       raw: pointsToArrays(rawPts), working: pointsToArrays(workPts), importMeta: s.importMeta || null,
-      bg: bg, peaks: peaks
+      bg: bg, peaks: peaks, charge: charge
     };
   }
 
@@ -606,6 +625,32 @@
     return Math.max(1, Math.ceil(m * 2));
   }
 
+  /* 荷电校正面板（XPS）：仅 XPS 表征显示；shift = 实测 − 目标（校正后 = 原 − shift）。 */
+  function renderChargePanel(s) {
+    var panel = $('chargePanel');
+    if (!panel) return;
+    if (state.technique !== 'xps' || !s) { panel.hidden = true; return; }
+    panel.hidden = false;
+    var c = s.charge || M.defaultCharge();
+    $('chargeMode').value = c.mode;
+    $('chargeRefOpts').hidden = c.mode !== 'reference';
+    $('chargeManualOpts').hidden = c.mode !== 'manual';
+    setInputValue($('chargeRefMeasured'), c.refMeasured == null ? '' : c.refMeasured);
+    setInputValue($('chargeRefTarget'), c.refTarget == null ? 284.8 : c.refTarget);
+    setInputValue($('chargeRefLabel'), c.refLabel || '');
+    setInputValue($('chargeShift'), c.shift == null ? '' : c.shift);
+    var st = $('chargeStatus');
+    if (c.applied && isFinite(c.shift)) {
+      st.textContent = '已校正：整谱平移 −' + M.formatNum(c.shift) + ' eV' +
+        (c.mode === 'reference' && c.refMeasured != null ? '（' + (c.refLabel || '参考峰') + ' ' + M.formatNum(c.refMeasured) + '→' + M.formatNum(c.refTarget) + ' eV）' : '') +
+        '。原始数据未改动。';
+      st.className = 'hint process-note';
+    } else {
+      st.textContent = '未校正：结合能可能整体偏移，化学态归属需谨慎。';
+      st.className = 'hint';
+    }
+  }
+
   function renderStats(s) {
     var stats = $('smpStats');
     stats.innerHTML = '';
@@ -669,6 +714,8 @@
     $('smpProcessNote').textContent = '分析层：' + s.processDesc + '；显示层 = 分析层 + 偏移 ' + s.offset + '（偏移不进入分析与导出分析值）';
 
     renderStats(s);
+
+    renderChargePanel(s);
 
     renderTrace(s);
 
@@ -928,10 +975,10 @@
       if (s.bg.mode !== 'manual') s.bg.mode = 'manual';
       renderAll();
     } else if (pickMode === 'peak') {
-      checkpoint('手动加峰 x=' + M.formatNum(s.working.x[i]) + '（' + s.name + '）');
-      s.peaks.list.push({ id: uid(), x: s.working.x[i], height: s.corrected.y[i], prominence: null, index: i, source: 'manual' });
+      checkpoint('手动加峰 x=' + M.formatNum(s.corrected.x[i]) + '（' + s.name + '）');
+      s.peaks.list.push({ id: uid(), x: s.corrected.x[i], height: s.corrected.y[i], prominence: null, index: i, source: 'manual' });
       s.peaks.list.sort(function (a, b) { return a.x - b.x; });
-      s.peaks.basisKey = AN.basisKey(s.working, s.bg);
+      s.peaks.basisKey = sampleBasisKey(s);
       renderAll();
       setDataTab('peaks');
     }
@@ -1087,7 +1134,7 @@
     s.peaks.list = res.peaks.map(function (p) {
       return { id: uid(), x: p.x, height: p.height, prominence: p.prominence, index: p.i, source: 'auto' };
     });
-    s.peaks.basisKey = AN.basisKey(s.working, s.bg);
+    s.peaks.basisKey = sampleBasisKey(s);
     s.peaks.sigma = res.sigma;
     highlightPeakId = null;
     renderAll();
@@ -1380,6 +1427,54 @@
   $('setStackGap').addEventListener('input', function () { var v = +this.value; if (isFinite(v) && v > 0) { state.settings.stackGap = v; renderChart(); save(); } });
   $('setStackScale').addEventListener('input', function () { var v = +this.value; if (isFinite(v) && v > 0) { state.settings.stackScale = v; renderChart(); save(); } });
   $('techSelect').addEventListener('change', function () { setTechnique(this.value); });
+
+  /* ---------- 荷电校正（XPS） ---------- */
+  $('chargeMode').addEventListener('change', function () {
+    var s = getSelected(); if (!s) return;
+    s.charge.mode = this.value;
+    $('chargeRefOpts').hidden = this.value !== 'reference';
+    $('chargeManualOpts').hidden = this.value !== 'manual';
+    if (this.value === 'none') s.charge.applied = false;
+    renderAll();
+  });
+  ['chargeRefMeasured', 'chargeRefTarget', 'chargeShift', 'chargeRefLabel'].forEach(function (id) {
+    $(id).addEventListener('input', function () {
+      var s = getSelected(); if (!s) return;
+      var v = parseFloat(this.value);
+      if (id === 'chargeRefMeasured') s.charge.refMeasured = isFinite(v) ? v : null;
+      else if (id === 'chargeRefTarget') s.charge.refTarget = isFinite(v) ? v : null;
+      else if (id === 'chargeShift') s.charge.shift = isFinite(v) ? v : 0;
+      else s.charge.refLabel = this.value;
+    });
+  });
+  $('btnChargeApply').addEventListener('click', function () {
+    var s = getSelected(); if (!s) return;
+    var c = s.charge;
+    if (c.mode === 'none') { toast('请先选择校正方式。', 'err'); return; }
+    var shift;
+    if (c.mode === 'reference') {
+      if (!isFinite(c.refMeasured) || !isFinite(c.refTarget)) { toast('按参考峰校正需填写实测值与目标值。', 'err'); return; }
+      shift = c.refMeasured - c.refTarget;
+      if (Math.abs(shift) < 1e-6) { toast('实测与目标一致，无需校正。'); c.applied = false; }
+    } else {
+      shift = c.shift;
+      if (!isFinite(shift)) { toast('请填写有效位移量。', 'err'); return; }
+    }
+    c.shift = shift; c.applied = true;
+    var sh = (c.applied && isFinite(c.shift)) ? c.shift : 0;
+    checkpoint('荷电校正 ' + (sh ? '−' + M.formatNum(sh) + ' eV' : '0') + '（' + s.name + '）');
+    renderAll(); save();
+    toast('荷电校正已应用：整谱平移 −' + M.formatNum(sh) + ' eV（原始数据不变）', 'ok');
+  });
+  $('btnChargeReset').addEventListener('click', function () {
+    var s = getSelected(); if (!s) return;
+    if (!s.charge.applied && !s.charge.shift) { toast('当前未应用校正。'); return; }
+    checkpoint('撤销荷电校正（' + s.name + '）');
+    s.charge.applied = false; s.charge.shift = 0; s.charge.mode = 'none';
+    renderAll(); save();
+    toast('已撤销荷电校正。');
+  });
+
   $('btnResetRange').addEventListener('click', function () {
     state.settings.xMin = state.settings.xMax = state.settings.yMin = state.settings.yMax = null;
     ['setXMin', 'setXMax', 'setYMin', 'setYMax'].forEach(function (id) { $(id).value = ''; });

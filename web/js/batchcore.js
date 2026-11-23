@@ -94,6 +94,7 @@
       var sch = isXrd ? Core.scherrer({ center: p.c, fwhm: p.w, lambda: lambda, instFwhm: inst, K: K }) : { ok: false };
       return {
         c: p.c, w: p.w, h: p.h, sp: p.sp, area: p.area,
+        se: p.se || null,
         d: isXrd ? Core.dFromT(p.c, lambda) : null,
         D: sch.ok ? sch.D : null, Dapparent: sch.ok ? sch.apparent : null, Dreason: sch.ok ? null : sch.reason
       };
@@ -144,7 +145,8 @@
           a.points.push({
             xValue: r.xValue, name: r.name, index: r.index,
             c: best.p.c, w: best.p.w, area: best.p.area, D: best.p.D, Dapparent: best.p.Dapparent,
-            d: best.p.d, rwp: r.quality ? r.quality.rwp : null
+            d: best.p.d, rwp: r.quality ? r.quality.rwp : null,
+            seC: best.p.se ? best.p.se.c : null, seW: best.p.se ? best.p.se.w : null
           });
         }
       });
@@ -153,17 +155,88 @@
     return { anchors: anchors, tol: tol, refName: ref.name };
   }
 
-  /* 趋势 CSV：长表，每行一个 (样品, 锚峰) 观测。 */
+  /* 最小二乘线性回归（OLS）：斜率/截距/R²/标准误。
+     n<3 时无残差自由度，标准误为 null（如实标注，不假装可估）。
+     注意：OLS 未按各点标准误加权；若各点 SE 差异大，加权拟合更严谨。 */
+  function linearRegression(xs, ys) {
+    var n = xs.length;
+    if (n !== ys.length) return { ok: false, reason: 'x/y 长度不一致' };
+    if (n < 2) return { ok: false, n: n, reason: '观测点不足（' + n + ' < 2），无法回归' };
+    var i, sx = 0, sy = 0, sxy = 0, sxx = 0;
+    for (i = 0; i < n; i++) {
+      if (!isFinite(xs[i]) || !isFinite(ys[i])) return { ok: false, n: n, reason: '含非有限数值' };
+      sx += xs[i]; sy += ys[i]; sxy += xs[i] * ys[i]; sxx += xs[i] * xs[i];
+    }
+    var xbar = sx / n, ybar = sy / n;
+    var Sxx = sxx - sx * sx / n;
+    if (!(Sxx > 0)) return { ok: false, n: n, reason: 'x 全部相同，无自变量变化' };
+    var slope = (sxy - sx * sy / n) / Sxx;
+    var intercept = ybar - slope * xbar;
+    var SST = 0, SSE = 0;
+    for (i = 0; i < n; i++) {
+      var yh = intercept + slope * xs[i];
+      SSE += (ys[i] - yh) * (ys[i] - yh);
+      SST += (ys[i] - ybar) * (ys[i] - ybar);
+    }
+    var r2 = SST > 0 ? 1 - SSE / SST : (SSE <= 1e-12 ? 1 : null);
+    var df = n - 2, slopeSe = null, interceptSe = null;
+    if (df >= 1) {
+      var s2 = SSE / df;
+      slopeSe = Math.sqrt(s2 / Sxx);
+      interceptSe = Math.sqrt(s2 * (1 / n + xbar * xbar / Sxx));
+    }
+    return {
+      ok: true, n: n, slope: slope, intercept: intercept, r2: r2,
+      slopeSe: slopeSe, interceptSe: interceptSe, df: df,
+      sse: SSE, xbar: xbar, ybar: ybar,
+      note: df < 1 ? 'n=2 无残差自由度，斜率无标准误' : '标准误基于残差方差（OLS 未加权）'
+    };
+  }
+
+  /* 回归直线在 [x0,x1] 的取值（用于画线）；±k·σ 为置信带（k 默认 1，σ 为预测标准差）。 */
+  function regressionLine(reg, x0, x1, k) {
+    if (!reg || !reg.ok) return null;
+    var kk = k != null ? k : 1;
+    function y(x) { return reg.intercept + reg.slope * x; }
+    /* 均值响应标准误：σ·sqrt(1/n + (x-x̄)²/Sxx)，Sxx 由 slopeSe 反推 */
+    var n = reg.n, s2 = reg.df >= 1 ? reg.sse / reg.df : 0;
+    function band(x) {
+      if (!(reg.df >= 1) || !(s2 > 0) || !reg.slopeSe) return 0;
+      var S = s2 / (reg.slopeSe * reg.slopeSe);
+      return kk * Math.sqrt(s2 * (1 / n + (x - reg.xbar) * (x - reg.xbar) / S));
+    }
+    return {
+      at: y, band: band,
+      p0: { x: x0, y: y(x0), lo: y(x0) - band(x0), hi: y(x0) + band(x0) },
+      p1: { x: x1, y: y(x1), lo: y(x1) - band(x1), hi: y(x1) + band(x1) }
+    };
+  }
+
+  /* 趋势 CSV：长表，每行一个 (样品, 锚峰) 观测 + 每锚峰回归参数。 */
   function trendCSV(aligned, metricLabels) {
-    var head = ['series', 'ref_2theta', 'x_value', 'sample', 'center_2theta', 'd_angstrom', 'fwhm_deg', 'area', 'D_nm', 'D_apparent', 'rwp'];
+    var head = ['series', 'ref_2theta', 'x_value', 'sample', 'center_2theta', 'd_angstrom', 'fwhm_deg', 'area', 'D_nm', 'D_apparent', 'rwp', 'se_center', 'se_fwhm'];
     var lines = [head.join(',')];
     aligned.anchors.forEach(function (a) {
       a.points.forEach(function (p) {
         lines.push([
           a.label, a.ref, p.xValue, csvCell(p.name), p.c, p.d, p.w, p.area,
-          p.D == null ? '' : p.D, p.Dapparent == null ? '' : p.Dapparent, p.rwp == null ? '' : p.rwp
+          p.D == null ? '' : p.D, p.Dapparent == null ? '' : p.Dapparent, p.rwp == null ? '' : p.rwp,
+          p.seC == null ? '' : p.seC, p.seW == null ? '' : p.seW
         ].join(','));
       });
+    });
+    return lines.join('\n');
+  }
+
+  /* 回归汇总 CSV：每行一个 (锚峰, 指标) 的 OLS 结果。 */
+  function regressionCSV(regs) {
+    var head = ['series', 'ref_2theta', 'metric', 'n', 'slope', 'slope_se', 'intercept', 'r2', 'note'];
+    var lines = [head.join(',')];
+    (regs || []).forEach(function (r) {
+      lines.push([csvCell(r.label), r.ref, csvCell(r.metric), r.n,
+        r.slope == null ? '' : r.slope, r.slopeSe == null ? '' : r.slopeSe,
+        r.intercept == null ? '' : r.intercept, r.r2 == null ? '' : r.r2,
+        csvCell(r.note || '')].join(','));
     });
     return lines.join('\n');
   }
@@ -183,6 +256,7 @@
   return {
     detectPeaks: detectPeaks, buildInitPeaks: buildInitPeaks,
     fitSample: fitSample, runBatch: runBatch, alignPeaks: alignPeaks,
-    trendCSV: trendCSV, summaryCSV: summaryCSV, csvCell: csvCell
+    linearRegression: linearRegression, regressionLine: regressionLine,
+    trendCSV: trendCSV, regressionCSV: regressionCSV, summaryCSV: summaryCSV, csvCell: csvCell
   };
 });

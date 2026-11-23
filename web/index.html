@@ -219,6 +219,32 @@
           </label>
           <p class="hint process-note" id="smpProcessNote"></p>
           <dl class="stats" id="smpStats"></dl>
+          <div id="chargePanel" class="charge-panel" hidden>
+            <h4 class="charge-head">荷电校正（XPS）</h4>
+            <p class="hint">以参考峰（如 C1s=284.8 eV、Au 4f₇/₂=84.0 eV）为基准整谱平移 X 轴；校正作用于分析/显示层，原始数据不变。校正后旧峰表将标为待更新。</p>
+            <label class="field"><span>方式</span>
+              <select id="chargeMode" class="input">
+                <option value="none" selected>不校正</option>
+                <option value="reference">按参考峰（实测→目标）</option>
+                <option value="manual">直接给位移量</option>
+              </select>
+            </label>
+            <div id="chargeRefOpts" class="charge-opts" hidden>
+              <div class="field-row">
+                <label class="field"><span>实测参考峰 (eV)</span><input id="chargeRefMeasured" class="input" type="number" step="any"></label>
+                <label class="field"><span>目标值 (eV)</span><input id="chargeRefTarget" class="input" type="number" step="any" value="284.8"></label>
+              </div>
+              <label class="field"><span>参考峰标注</span><input id="chargeRefLabel" class="input" type="text" maxlength="40" placeholder="如 C1s (C–C)"></label>
+            </div>
+            <div id="chargeManualOpts" class="charge-opts" hidden>
+              <label class="field"><span>位移量 Δ (eV，校正后坐标 = 原坐标 − Δ)</span><input id="chargeShift" class="input" type="number" step="any" value="0"></label>
+            </div>
+            <div class="field-row">
+              <button id="btnChargeApply" class="btn primary small" type="button">应用校正</button>
+              <button id="btnChargeReset" class="btn small ghost" type="button">撤销</button>
+            </div>
+            <p id="chargeStatus" class="hint process-note"></p>
+          </div>
           <details id="smpTrace" class="trace">
             <summary>导入追溯（行号 / 参数 / 排序 / 跳过行）</summary>
             <div id="smpTraceBody" class="trace-body"></div>
@@ -418,11 +444,16 @@
         <div class="field-row">
           <label class="field"><span>指标</span><select id="batchMetric" class="input"><option value="c" selected>峰位 2θ (°)</option><option value="d">d 值 (Å)</option><option value="w">FWHM (°)</option><option value="area">积分面积</option><option value="D">表观晶粒尺寸 (nm)</option></select></label>
           <label class="field"><span>参考峰（锚点）</span><select id="batchAnchor" class="input"></select></label>
-          <label class="field"><span>多峰同图</span><input id="batchRel" type="checkbox"> 相对首样品偏移</label>
+        </div>
+        <div class="field-row">
+          <label class="check"><input id="batchRel" type="checkbox"><span>相对首样品偏移</span></label>
+          <label class="check"><input id="batchReg" type="checkbox" checked><span>回归线 + 95% 置信带</span></label>
+          <label class="check"><input id="batchErr" type="checkbox" checked><span>误差棒 (±1σ)</span></label>
         </div>
         <svg id="batchTrendChart" viewBox="0 0 960 420" role="img" aria-label="系列样品趋势图"></svg>
         <div id="batchTrendLegend" class="fit-legend"></div>
         <p class="hint mt-warn" id="batchScherrerWarn" hidden>表观值：未扣仪器宽化，系统性偏小；不与 TEM 粒径等价。</p>
+        <div class="table-scroll fit-scroll" id="batchRegTable"></div>
         <p class="hint" id="batchTrendNote"></p>
       </section>
       <section class="settings-section">
@@ -433,6 +464,7 @@
         <h3>导出</h3>
         <div class="field-row">
           <button id="btnBatchTrendCsv" class="btn small" type="button">趋势 CSV</button>
+          <button id="btnBatchRegCsv" class="btn small" type="button">回归 CSV</button>
           <button id="btnBatchSummaryCsv" class="btn small" type="button">汇总 CSV</button>
           <button id="btnBatchPeaksCsv" class="btn small" type="button">全峰 CSV</button>
           <button id="btnBatchPng" class="btn small" type="button">趋势 PNG</button>

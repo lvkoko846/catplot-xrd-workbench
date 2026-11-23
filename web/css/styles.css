@@ -877,3 +877,9 @@ table.peaks.mini { margin: 6px 0; }
 .match-ref-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .match-ref-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; border: 1px solid var(--site-border); border-radius: 999px; padding: 2px 8px; background: var(--site-inset); }
 .match-phase-row { display: flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 3px 0; border-bottom: 1px solid var(--site-line); }
+
+/* ---------- 荷电校正（XPS） ---------- */
+.charge-panel { margin-top: 10px; padding: 10px; border: 1px solid var(--site-border); border-radius: calc(var(--site-radius) * 0.85); background: var(--site-inset); display: grid; gap: 8px; }
+.charge-head { margin: 0; font-size: calc(12px * var(--site-type)); font-weight: 600; color: var(--site-fg); padding-left: 8px; border-left: 2px solid var(--site-accent); }
+.charge-opts { display: grid; gap: 6px; }
+

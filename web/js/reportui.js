@@ -8,7 +8,9 @@
   function collect() {
     var st = App.state;
     var samples = st.samples.map(function (s) {
-      return { name: s.name, source: s.source, points: s.raw && s.raw.x ? s.raw.x.length : 0, normalize: !!s.normalize, offset: s.offset || 0 };
+      var ch = (s.charge && s.charge.applied && isFinite(s.charge.shift)) ? s.charge : null;
+      return { name: s.name, source: s.source, points: s.raw && s.raw.x ? s.raw.x.length : 0, normalize: !!s.normalize, offset: s.offset || 0,
+        charge: ch ? { shift: ch.shift, refLabel: ch.refLabel || '', refMeasured: ch.refMeasured, refTarget: ch.refTarget } : null };
     });
     /* 对比图 SVG（显示层，含参考轨道） */
     var mainSvg = null;

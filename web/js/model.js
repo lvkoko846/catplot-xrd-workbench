@@ -26,18 +26,22 @@
   }
 
   /* 分析层 = 原始工作副本 + 明确处理（归一化）；显示层 = 分析层 + 纵向偏移。
-     偏移只存在于显示层，绝不进入分析层。 */
-  function buildLayers(working, normalize, offset) {
+     偏移只存在于显示层，绝不进入分析层。
+     xShift：X 轴整体平移量（XPS 荷电校正等），校正后坐标 = 原坐标 − xShift。
+     作用于分析与显示层；raw/working 原始数据不受影响。 */
+  function buildLayers(working, normalize, offset, xShift) {
     var n = working.y.length;
-    var ay = new Array(n), dy = new Array(n);
+    var sh = isFinite(xShift) ? xShift : 0;
+    var ax = new Array(n), ay = new Array(n), dy = new Array(n);
     var m = normalize ? maxOf(working.y) : 1;
     for (var i = 0; i < n; i++) {
+      ax[i] = sh ? working.x[i] - sh : working.x[i];
       ay[i] = normalize ? working.y[i] / m : working.y[i];
       dy[i] = ay[i] + (offset || 0);
     }
     return {
-      analysis: { x: working.x.slice(), y: ay },
-      display: { x: working.x.slice(), y: dy }
+      analysis: { x: ax, y: ay },
+      display: { x: ax.slice(), y: dy }
     };
   }
 
@@ -222,6 +226,12 @@
   }
   function defaultPeaks() {
     return { params: defaultPeakParams(), list: [], basisKey: null, sigma: null };
+  }
+  /* 荷电校正（XPS）：shift = 实测参考峰位 − 目标参考峰位（如 C1s 实测286.3 − 目标284.8 = 1.5）。
+     mode: none（未校正）/ manual（直接给 shift）/ reference（由参考峰计算）。
+     applied 时作用于 corrected/analysis/display 层的 X 轴；raw/working 不受影响。 */
+  function defaultCharge() {
+    return { mode: 'none', shift: 0, refMeasured: null, refTarget: null, refLabel: '', applied: false };
   }
 
   function validateBg(bg, label, errors) {
@@ -472,7 +482,7 @@
           name: s.name, color: s.color, lineWidth: s.lineWidth, visible: s.visible,
           offset: s.offset, normalize: s.normalize, source: s.source, note: s.note || '',
           raw: s.raw, working: s.working, importMeta: s.importMeta || null,
-          bg: s.bg || defaultBg(), peaks: s.peaks || defaultPeaks()
+          bg: s.bg || defaultBg(), peaks: s.peaks || defaultPeaks(), charge: s.charge || defaultCharge()
         };
       })
     };
@@ -507,7 +517,7 @@
     textUnits: textUnits, fitText: fitText, legendLayout: legendLayout,
     detectQuality: detectQuality, mergeDuplicates: mergeDuplicates, sortPoints: sortPoints,
     formatNum: formatNum, errorSignature: errorSignature,
-    defaultBg: defaultBg, defaultPeakParams: defaultPeakParams, defaultPeaks: defaultPeaks,
+    defaultBg: defaultBg, defaultPeakParams: defaultPeakParams, defaultPeaks: defaultPeaks, defaultCharge: defaultCharge,
     validateBg: validateBg, validatePeaks: validatePeaks,
     validateProject: validateProject, serializeProject: serializeProject,
     TECHNIQUES: TECHNIQUES, tech: tech, GUIDE: GUIDE, guide: guide
