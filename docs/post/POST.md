@@ -3,8 +3,12 @@
 > **参赛赛道**：Qoder 高校创造力大赛 · StudyHack
 > **作者**：太原理工大学 · 化学工程与技术专业 · 催化方向研究生
 > **Qoder 账号**：`<请补充你的账号昵称>`（发帖前替换）
-> **在线体验**：https://catplot-xrd-ahzrkmiqf3h.qoder.website （纯静态、无需安装、数据不出浏览器）
-> **代码与数据**：公开仓库 bundle `CatPlot-public.bundle`（MIT 代码 + CC0/MIT/CC BY 示例数据，溯源见文末）
+>
+> **评委快速入口**
+> - 在线体验（无需安装、数据不出浏览器）：https://catplot-xrd-ahzrkmiqf3h.qoder.website
+> - 演示数据（公开许可，可直接上传复现图 1–9）：XRED MIT 谱 / COD CC0 示例卡 / MIT 拉曼谱 / Zenodo CC BY XPS·DRIFT，溯源见第五节
+> - 源码：公开 git 仓库 `<发帖前补充仓库 URL>`；离线 bundle `CatPlot-public.bundle`（git clone 该 bundle 即可完整复现）
+> - 一键复现：`node scripts/preview.mjs` 后按第七节命令跑全部真值/端到端套件
 
 ---
 
