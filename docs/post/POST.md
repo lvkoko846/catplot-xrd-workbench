@@ -12,7 +12,7 @@
 
 CatPlot 是一个**跑在浏览器里的多表征（XRD / 拉曼 / 红外 / XPS）分析工作台**：上传数值谱 → 扣背底 → 寻峰 → 分峰拟合 → 峰面积比 / 表观晶粒尺寸 → 批量趋势 → 一键组会报告 → 出版级 PNG/SVG 导出。全程**原始数据不上传、不覆盖**，无数据库、无后端、无外网依赖，打开链接就能用。
 
-![XRD 堆叠出版版式与公开示例卡轨道](images/01-xrd-stack-cards.png)
+![XRD 堆叠出版版式与公开示例卡轨道](https://catplot-xrd-ahzrkmiqf3h.qoder.website/post-images/01-xrd-stack-cards.png)
 
 *图 1：XRD 多样品纵向堆叠（出版版式，互不重叠），底部为 CC0 计算卡片棒图轨道（标化学式与来源），顶栏可切换表征。*
 
@@ -29,9 +29,9 @@ CatPlot 是一个**跑在浏览器里的多表征（XRD / 拉曼 / 红外 / XPS�
 ## 三、开发过程（与 Qoder 协作的真实时间线）
 
 1. **绘图与正确性守卫**：先做出版级 SVG 绘图与 CSV/TXT 解析，随后按 16 条正确性问题清单重建「raw / working / corrected」三层分离、导入逐行追溯、显示偏移不进分析。
-2. **Jade 参照的分析闭环**：SNIP/手动背底（预览→确认→可撤销）、自动+手动寻峰、上游变更→峰表「待更新」标记、撤销/重做与处理历史、项目存档。
+2. **参照商业软件口径的分析闭环**：SNIP/手动背底（预览→确认→可撤销）、自动+手动寻峰、上游变更→峰表「待更新」标记、撤销/重做与处理历史、项目存档。
 3. **参考库与匹配**：服务端 SQLite 全库索引 + 周期表元素条件 + 峰表匹配（pm-2：一对一占用、参考强峰覆盖、偏差双单位）；浏览器只收峰表不收原始谱。
-4. **版权合规分流**：ICDD/Jade 转换库仅授权个人研究 → 拆出**私人研究版**（禁止公开/参赛）；公开版剥离数据库与检索，仅保留**公开许可示例卡**（COD CC0 计算谱、XRED MIT 实验谱），并加 `audit-release.mjs` 发布门禁（禁 .db/禁受限品牌词/许可白名单）。
+4. **版权合规分流**：商业卡片库转换数据仅授权个人研究 → 拆出**私人研究版**（禁止公开/参赛）；公开版剥离数据库与检索，仅保留**公开许可示例卡**（COD CC0 计算谱、XRED MIT 实验谱），并加 `audit-release.mjs` 发布门禁（禁 .db/禁受限品牌词/许可白名单）。
 5. **峰拟合引擎（fit-1）**：纯 JS Levenberg–Marquardt + 解析 Jacobian + 参数缩放 + 单参数锁定；Gaussian/Lorentz/Pseudo-Voigt/Pearson VII；残差子图、Rwp/Rp/χ²、参数标准误（线性近似）、Scherrer 三模式（未提供仪器宽化强制「表观值」警示）。
 6. **多表征通用引擎**：XRD/拉曼/红外/XPS 共用绘图/寻峰/拟合/批量/报告；每表征推荐背底（XPS=Shirley）与流程指南；XPS 荷电校正（参考峰实测→目标，整谱平移、原始数据不动）；分峰面积比面板（ID/IG、化学态比、官能团比）。
 7. **批量趋势 + 组会报告 + 视觉精修**：系列样品共享区间逐一套拟合→峰位/FWHM/面积/表观尺寸趋势；自包含 HTML 报告带样品表（含荷电校正列）、溯源表、诚实清单；统一设计令牌、去渐变/发光/重阴影。
@@ -44,11 +44,11 @@ CatPlot 是一个**跑在浏览器里的多表征（XRD / 拉曼 / 红外 / XPS�
 
 数据：**XRED（MIT）** TiO₂ 金红石+锐钛矿实测混合谱（2501 点，10–60°）；参考卡为 **COD CC0** 计算谱（pymatgen 离线生成）。
 
-![XRD 分峰拟合与残差子图](images/02-xrd-fit-residual.png)
+![XRD 分峰拟合与残差子图](https://catplot-xrd-ahzrkmiqf3h.qoder.website/post-images/02-xrd-fit-residual.png)
 
 *图 2：选区拟合（24.4–26.3°），红色总拟合 + 填充分峰 + 橙色背底，下方残差子图共享 X 轴；Rwp/Rp/χ² 与参数标准误同屏。*
 
-![XRD 粘贴峰表匹配与确认闭环](images/03-xrd-match-loop.png)
+![XRD 粘贴峰表匹配与确认闭环](https://catplot-xrd-ahzrkmiqf3h.qoder.website/post-images/03-xrd-match-loop.png)
 
 *图 3：无数据库版「物相匹配」——粘贴自有合法参考峰表与实验峰做证据匹配；确认物相后按峰位跨轮对齐覆盖核算，「用剩余未解释峰续匹配」完成多物相闭环。得分是证据合成，不是存在概率。*
 
@@ -58,7 +58,7 @@ CatPlot 是一个**跑在浏览器里的多表征（XRD / 拉曼 / 红外 / XPS�
 
 数据：**raman-noodles/raman-spectra-decomp-analysis（MIT）** 甲酸分解拉曼谱。
 
-![拉曼分峰与面积比面板](images/04-raman-fit-ratio.png)
+![拉曼分峰与面积比面板](https://catplot-xrd-ahzrkmiqf3h.qoder.website/post-images/04-raman-fit-ratio.png)
 
 *图 4：切换拉曼自动推荐 SNIP 扣荧光背底；分峰后「分峰面积比」面板给出 A/B = 0.253（相对占比，非绝对含量）——ID/IG 的正确口径是面积比，反映缺陷/石墨化程度。*
 
@@ -66,7 +66,7 @@ CatPlot 是一个**跑在浏览器里的多表征（XRD / 拉曼 / 红外 / XPS�
 
 数据：**Zenodo 15180744（CC BY 4.0）** h-BN 氧化脱氢反应后 DRIFT 谱。
 
-![红外 DRIFT 寻峰](images/05-ftir-drift-peaks.png)
+![红外 DRIFT 寻峰](https://catplot-xrd-ahzrkmiqf3h.qoder.website/post-images/05-ftir-drift-peaks.png)
 
 *图 5：红外表征推荐手动/自动基线校正；官能团区寻峰后按指南「分峰(官能团区) → 峰面积相对占比(如 C=O/C–O)」，并提示基线影响面积、需统一方法。*
 
@@ -74,21 +74,21 @@ CatPlot 是一个**跑在浏览器里的多表征（XRD / 拉曼 / 红外 / XPS�
 
 数据：同 Zenodo 15180744（CC BY 4.0）h-BN 催化剂 C 1s / B 1s 谱。
 
-![XPS 荷电校正与 Shirley](images/06-xps-charge-shirley.png)
+![XPS 荷电校正与 Shirley](https://catplot-xrd-ahzrkmiqf3h.qoder.website/post-images/06-xps-charge-shirley.png)
 
 *图 6：切 XPS 自动套用 Shirley 背底；荷电校正面板以实测 C 1s 284.971 eV → 目标 284.8 eV，状态明示「已校正：整谱平移 −0.17 eV…原始数据未改动」。*
 
-![XPS B1s 化学态分峰](images/07-xps-b1s-states.png)
+![XPS B1s 化学态分峰](https://catplot-xrd-ahzrkmiqf3h.qoder.website/post-images/07-xps-b1s-states.png)
 
 *图 7：B 1s 分峰（B–N ≈190.5 eV / B–O ≈192.5 eV，Rwp 0.024），面积比面板给出化学态相对占比；界面注明绝对定量需灵敏度因子、本工具不做。*
 
 ### 4.5 系列批量趋势 + 一键组会报告
 
-![批量趋势](images/09-batch-trend.png)
+![批量趋势](https://catplot-xrd-ahzrkmiqf3h.qoder.website/post-images/09-batch-trend.png)
 
 *图 8：系列样品（模拟系列，已标注）共享区间逐一套拟合，峰位/FWHM/面积/表观晶粒尺寸按参考峰位跨样品对齐成趋势；晶粒尺寸为 Scherrer 表观值并强制警示。*
 
-![组会报告](images/08-report.png)
+![组会报告](https://catplot-xrd-ahzrkmiqf3h.qoder.website/post-images/08-report.png)
 
 *图 9：自包含 HTML 组会报告——样品表含「荷电校正」列、参考/示例数据溯源表（许可+链接）、对比图/趋势图/全峰参数、方法与「未做/待核验」清单。数据仅在本机浏览器处理。*
 
