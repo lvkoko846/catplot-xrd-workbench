@@ -25,10 +25,10 @@
 
   <div class="tb-group" role="group" aria-label="文件">
     <button id="btnUploadTop" class="btn primary small" type="button">导入数据</button>
-    <button id="btnSampleTop" class="btn ghost small" type="button" title="程序生成的模拟数据，仅供演示">模拟示例</button>
+    <button id="btnSampleTop" class="btn ghost small" type="button" title="四表征公开实验演示与明确标注的模拟 XRD">演示数据</button>
     <button id="btnExportProject" class="btn ghost small" type="button" title="导出项目 JSON（含背景/峰表/拟合/历史/物相）">保存项目</button>
     <button id="btnRestoreProject" class="btn ghost small" type="button">恢复项目</button>
-    <input type="file" id="fileInput" accept=".csv,.txt,.tsv,.dat,text/csv,text/plain" multiple hidden>
+    <input type="file" id="fileInput" accept=".csv,.txt,.tsv,.dat,.jdx,.jcamp,.dx,.uxd,text/csv,text/plain" multiple hidden>
     <input type="file" id="projectInput" accept=".json,application/json" hidden>
   </div>
 
@@ -80,9 +80,9 @@
     </div>
     <div id="sampleList" class="sample-list"></div>
     <div class="panel-foot">
-      <button id="btnUploadSide" class="btn block small" type="button">＋ 上传 CSV / TXT</button>
-      <button id="btnSampleSide" class="btn block ghost small" type="button">加载示例</button>
-      <p class="hint">支持拖拽导入 · 数据仅在本机</p>
+      <button id="btnUploadSide" class="btn block small" type="button">＋ 上传谱图文件</button>
+      <button id="btnSampleSide" class="btn block ghost small" type="button">加载演示数据</button>
+      <p class="hint">CSV / TXT / JCAMP-DX / Bruker UXD · 数据仅在本机</p>
     </div>
     <div class="panel-head hist-head">
       <h2>处理历史</h2>
@@ -108,12 +108,12 @@
           <path d="M4 52 L20 48 L30 18 L40 48 L52 36 L62 8 L74 48 L90 40 L116 44" fill="none" stroke="var(--site-border)" stroke-width="3" stroke-linejoin="round"/>
         </svg>
         <h3>暂无曲线</h3>
-        <p>上传 CSV / TXT 数据，或加载示例</p>
+        <p>上传 CSV / TXT / JCAMP-DX / UXD，或加载四表征演示</p>
         <div class="empty-actions">
           <button id="btnUploadEmpty" class="btn primary" type="button">上传数据</button>
-          <button id="btnSampleEmpty" class="btn ghost" type="button">加载示例</button>
+          <button id="btnSampleEmpty" class="btn ghost" type="button">加载演示</button>
         </div>
-        <p class="hint">示例为程序生成的模拟数据，不代表真实实验</p>
+        <p class="hint">公开实验数据保留许可与来源；模拟 XRD 明确标注</p>
       </div>
       <div id="tooltip" class="tooltip" hidden></div>
       <div id="peakReadout" class="peak-readout" hidden></div>
@@ -524,6 +524,25 @@
   </aside>
 </main>
 
+<!-- 演示数据选择 -->
+<div id="demoModal" class="modal-overlay" hidden>
+  <div class="modal demo-modal" role="dialog" aria-modal="true" aria-labelledby="demoTitle">
+    <div class="modal-head">
+      <div>
+        <h2 id="demoTitle">一键演示数据</h2>
+        <span class="hint">公开实验谱保留来源与许可；模拟 XRD 由固定种子程序生成</span>
+      </div>
+      <button id="demoClose" class="icon-btn" type="button" aria-label="关闭">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="demoTechTabs" class="demo-tech-tabs" role="tablist" aria-label="演示表征"></div>
+      <div id="demoStatus" class="imp-summary" aria-live="polite">正在读取本地演示数据…</div>
+      <div id="demoList" class="demo-list"></div>
+      <p class="hint">加载会替换当前样品与处理状态；替换操作可撤销。原始实验数据不会被改写。</p>
+    </div>
+  </div>
+</div>
+
 <!-- 导入对话框 -->
 <div id="importModal" class="modal-overlay" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="impTitle">
@@ -536,7 +555,7 @@
     </div>
     <div class="modal-body">
       <div class="imp-controls">
-        <label class="field"><span>分隔符</span>
+        <label class="field" id="impDelimField"><span>分隔符</span>
           <select id="impDelim">
             <option value="auto">自动检测</option>
             <option value=",">逗号 ,</option>
@@ -545,13 +564,15 @@
             <option value="ws">空白（空格 / Tab）</option>
           </select>
         </label>
-        <label class="field"><span>跳过文件头行数</span>
+        <label class="field" id="impSkipField"><span>跳过文件头行数</span>
           <input id="impSkip" type="number" min="0" step="1" value="0">
         </label>
-        <label class="field"><span>X 数据列（2θ）</span><select id="impX"></select></label>
-        <label class="field"><span>Y 数据列（强度）</span><select id="impY"></select></label>
+        <label class="field" id="impXField"><span>X 数据列</span><select id="impX"></select></label>
+        <label class="field" id="impYField"><span>Y 数据列</span><select id="impY"></select></label>
         <label class="field span2"><span>样品名称</span><input id="impName" type="text" maxlength="60"></label>
       </div>
+      <div id="impNativeMeta" class="imp-native-meta" hidden></div>
+      <div id="impWarnings" class="imp-warnings" hidden></div>
 
       <div class="imp-block">
         <h4>数据预览<span class="hint">（前 8 行，高亮所选 X / Y 列）</span></h4>

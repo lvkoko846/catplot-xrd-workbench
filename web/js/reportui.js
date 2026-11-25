@@ -9,7 +9,9 @@
     var st = App.state;
     var samples = st.samples.map(function (s) {
       var ch = (s.charge && s.charge.applied && isFinite(s.charge.shift)) ? s.charge : null;
+      var meta = s.importMeta || {};
       return { name: s.name, source: s.source, points: s.raw && s.raw.x ? s.raw.x.length : 0, normalize: !!s.normalize, offset: s.offset || 0,
+        license: meta.license || '', sourceUrl: meta.sourceUrl || '', citation: meta.citation || '',
         charge: ch ? { shift: ch.shift, refLabel: ch.refLabel || '', refMeasured: ch.refMeasured, refTarget: ch.refTarget } : null };
     });
     /* 对比图 SVG（显示层，含参考轨道） */
@@ -35,7 +37,13 @@
       if ((mu.last && mu.last.candidates) || (mu.phases && mu.phases.length)) match = { candidates: mu.last ? mu.last.candidates : [], phases: mu.phases, coverage: covTxt };
     }
     /* 示例卡溯源 */
-    var provenance = [];
+    var provenance = [], seenSources = new Set();
+    samples.filter(function (s) { return s.source === 'demo'; }).forEach(function (s) {
+      var key = s.sourceUrl + '|' + s.citation;
+      if (seenSources.has(key)) return;
+      seenSources.add(key);
+      provenance.push({ name: s.name, license: s.license, source: '内置公开演示', url: s.sourceUrl, note: s.citation });
+    });
     if (window.CatCards && CatCards.rt && CatCards.rt.doc && CatCards.rt.doc.cards) {
       CatCards.rt.doc.cards.forEach(function (c) { provenance.push({ name: c.name, license: c.license, source: c.source, url: c.source_url, note: c.pattern_type === 'computed' ? '计算图谱' : '实验谱' }); });
     }

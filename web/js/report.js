@@ -31,7 +31,7 @@
     var head1 = ['样品', '来源', '数据点', '归一化', '显示偏移'];
     if (anyCharge) head1.push('荷电校正');
     H.push(table(head1, (p.samples || []).map(function (s) {
-      var row = [s.name, s.source === 'sim' ? '模拟（演示）' : '上传（实验）', s.points, s.normalize ? '是' : '否', f(s.offset, 1)];
+      var row = [s.name, s.source === 'sim' ? '模拟（演示）' : (s.source === 'demo' ? ('内置公开演示（' + (s.license || '公开许可') + '）') : '上传（实验）'), s.points, s.normalize ? '是' : '否', f(s.offset, 1)];
       if (anyCharge) row.push(s.charge ? ('−' + f(s.charge.shift, 2) + ' eV' + (s.charge.refMeasured != null ? '（' + (s.charge.refLabel || '参考峰') + ' ' + f(s.charge.refMeasured, 1) + '→' + f(s.charge.refTarget, 1) + '）' : '')) : '未校正');
       return row;
     })));

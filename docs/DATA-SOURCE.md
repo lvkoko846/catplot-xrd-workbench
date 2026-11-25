@@ -14,6 +14,26 @@
 - XRED：MIT 许可实验数据集；data.csv git sha 47c11492a296c777467c26194f9f2ac9ed4aeb7a；本地副本 tests/fixtures/real-xred/tio2-rutile-anatase.csv（2501 点 10–60°）。
   实验峰表由原始谱局部极大提取（hkl 未指认）；波长 λ=1.5406 为峰位推断（Cu Kα），非数据集声明，已在卡 note 声明。
 
+## 四表征公开演示谱（web/data/demo-spectra.json）
+
+| id | 表征 | 数据 | 点数 | 许可 |
+|---|---|---|---:|---|
+| xred-tio2 | XRD | XRED TiO₂ 金红石+锐钛矿实验谱 | 2501 | MIT |
+| raman-formic-acid | 拉曼 | Raman Noodles 甲酸分解拉曼谱 | 1941 | MIT |
+| drift-spent-hbn | 红外 | Zenodo 15180744 反应后 h-BN DRIFT | 3475 | CC BY 4.0 |
+| xps-c1s-hbn | XPS | Zenodo 15180744 C 1s | 481 | CC BY 4.0 |
+| xps-b1s-hbn | XPS | Zenodo 15180744 B 1s | 561 | CC BY 4.0 |
+
+- Raman Noodles：https://github.com/raman-noodles/raman-spectra-decomp-analysis
+- Zenodo 15180744：https://zenodo.org/records/15180744 （Low-temperature oxidation of hexagonal boron nitride during oxidative dehydrogenation）
+- 演示包由 `node scripts/build-demo-data.mjs` 从仓库内已留存的公开数据确定性生成；每条记录保留 `source_url`、`citation`、`license`、单位、推荐背景与寻峰参数。
+- 加载演示会替换当前工作项目，但生成撤销检查点；`raw` 数组不被背景、荷电校正、归一化或显示偏移改写。模拟 XRD 为固定种子程序生成，单独标识，不计入上述真实实验谱。
+
+## 原生格式验收样本（仅 tests/，不部署）
+
+- `BT86_.UXD`：xylib 示例数据，2374 点；与独立提取的 `BT86_xrd.txt` 逐点比对。来源与仪器元数据见 `tests/fixtures/real/PROVENANCE.md`。
+- `MiniDIFDUP.JDX`：readJDX 示例，GPL-3，584 点；覆盖 SQZ/DIF/DIFDUP 与 X/Y 因子。该文件头 `MAXY/MINY` 与解码数据不一致，CatPlot 将其作为元数据冲突告警，不改写解码值；X 坐标在 FIRSTX/LASTX/NPOINTS 完整且点数匹配时按标准端点重建，并报告与 DELTAX 的差异。
+
 ## 计算参数（计算图谱卡）
 pymatgen XRDCalculator：Cu Kα（1.5406 Å）、scaled=True、2θ 10–90°、默认 Lorentz-偏振校正、**无温度因子、无仪器宽化、无择优取向**、symprec=0.1。
 生成命令（离线、可复现）：`python scripts/build-examples.py`。
@@ -25,7 +45,7 @@ pymatgen XRDCalculator：Cu Kα（1.5406 Å）、scaled=True、2θ 10–90°、�
 - Scherrer 未提供仪器宽化时仅给表观值并强制警示。
 
 ## 代码许可
-源代码 MIT（见根 LICENSE）。示例数据许可随卡标注（CC0-1.0 / MIT），再分发时保留来源链接与引用文本（cards 的 source_url/citation 字段，界面与导出脚注携带）。
+源代码 MIT（见根 LICENSE）。部署数据许可随条目标注（CC0-1.0 / MIT / CC BY 4.0），再分发时保留来源链接与引用文本（界面与导出脚注携带）。GPL-3 的 MiniDIFDUP 样本只用于仓库测试，不进入 `web/`。
 
 ## 历史说明
 本目录曾含受限许可旧库探索（开放库路由/服务端 SQLite），已于 2026-11-18 全部剥离并隔离至仓库外（F:\Caplot-quarantine，不随公开仓库分发）；个人研究用途的完整版另存 F:\Caplot-jade（禁止公开）。

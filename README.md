@@ -1,12 +1,14 @@
-# CatPlot · XRD 分析工作台（公开版）
+# CatPlot · 多表征分析工作台（公开版）
 
-浏览器本地的 XRD 数值数据分析与绘图工作台：**上传 → 背景扣除 → 寻峰 → 峰拟合 → 出版级导出**。
-纯静态、零依赖、零外网调用、无数据库；参考数据为内置**公开许可示例卡**（CC0 计算图谱 ×2 + MIT 实验谱 ×1）。
+浏览器本地的 XRD / 拉曼 / 红外 / XPS 数值数据分析与绘图工作台：**上传 → 背景扣除 → 寻峰 → 峰拟合 → 出版级导出**。
+纯静态、零依赖、零外网调用、无数据库；内置**公开许可示例卡**与**5 份四表征真实公开实验谱**，也可导入 JCAMP-DX 与 Bruker UXD。
 
 > 本版为可公开部署/公开仓库版本。含受限许可数据的个人研究完整版另存他处，不随本仓库分发。
 
 ## 功能
-- 上传 CSV/TXT 数值谱（浏览器本地解析，原始数据不上传、不覆盖）；导入预览/逐行追溯/错误定位。
+- 上传 CSV/TXT/TSV/DAT、**JCAMP-DX（.jdx/.jcamp/.dx）与 Bruker UXD**（浏览器本地解析，原始数据不上传、不覆盖）；导入预览/逐行追溯/错误定位。
+- **原生 JCAMP-DX**：XYDATA / XYPOINTS / PEAK TABLE，AFFN/PAC、SQZ、DIF、DUP、DIFDUP，XFACTOR/YFACTOR；FIRSTX/LASTX/NPOINTS 完整时优先重建规则 X，DELTAX/极值冲突明确告警；压缩行保留物理行号与逻辑点号。
+- **一键演示数据**：XRD / 拉曼 / 红外 / XPS 共 5 份真实公开实验谱（MIT / CC BY 4.0），附来源、引用、许可与推荐背景；模拟 XRD 单独标明程序生成。
 - **堆叠出版风格**（≥2 样品默认）：纵向瀑布错开、Intensity (a.u.) 无 Y 刻度、粗黑框、底部卡片棒图轨道；间距/缩放可调、可回退普通模式；随 PNG/SVG 导出。
 - **上传我的卡片对比**：支持 ICDD PDF 文本卡片（自动提取卡号/化学式/波长/峰表）与 CSV/TXT 峰表；**不做匹配分析**，直接按上传顺序画成图下方棒图轨道（纵向压缩堆叠），标「化学式 PDF#卡号」、可改名；坏行具体报错；随项目存档与导出。
 - **多表征通用引擎**：顶栏切换 XRD/拉曼/红外/XPS；绘图(堆叠)/寻峰/拟合/批量趋势/报告 全表征复用，轴标签按表征切换；d值/Scherrer/卡片/物相匹配 仅 XRD。拟合初值按数据步长自适应。
@@ -36,18 +38,20 @@ node scripts/preview.mjs          # http://127.0.0.1:4173 （或任意静态服�
 # 若浏览器显示旧版/连不上：预览服务是本地进程，会话结束可能被系统回收。重启上述命令后刷新即可（服务设 no-store，无缓存）。
 python scripts/build-examples.py  # 可选：离线重生成示例卡（需 pymatgen）
 ```
-测试（headless Chrome）：`node tests/run-tests.mjs && node tests/browser-workbench.mjs && node tests/browser-fit.mjs && node tests/browser-public.mjs && node tests/fit-model.mjs && node tests/batch-model.mjs && node tests/browser-batch.mjs && node tests/match-model.mjs && node tests/browser-match.mjs && node tests/report-model.mjs && node tests/browser-report.mjs && node scripts/mobile-check.mjs`
+逻辑与原生格式：`node tests/run-tests.mjs && node tests/native-formats.mjs && node tests/fit-model.mjs && node tests/batch-model.mjs && node tests/match-model.mjs && node tests/report-model.mjs`。
+浏览器验收（先启动 4173 预览；Chrome 路径可用 `CHROME_PATH` 覆盖）：
+`node tests/browser-workbench.mjs && node tests/browser-fit.mjs && node tests/browser-public.mjs && node tests/browser-batch.mjs && node tests/browser-match.mjs && node tests/browser-report.mjs && node tests/browser-charge.mjs && node tests/browser-stack-upload.mjs && node tests/browser-techniques.mjs && node tests/browser-demo-native.mjs && node scripts/mobile-check.mjs`。
 真实系列演示：`node scripts/demo-series.mjs`（XRED MIT 3 样品，产出截图+组会报告）。
-发布门禁：`node scripts/audit-release.mjs`。
+发布门禁：`node scripts/audit-release.mjs`（同时检查演示包许可、来源、四表征覆盖与有限数值）。
 
 ## 目录
-- `web/`：完整静态产物（index.html / css / js / data/example-cards.json）
-- `scripts/`：预览、示例卡生成、审计门禁、移动端检查、截图取证
-- `tests/`：单元/真值/浏览器端到端套件与公开 fixture（XRED MIT 谱 + COD CC0 CIF）
+- `web/`：完整静态产物（index.html / css / js / data/example-cards.json + demo-spectra.json）
+- `scripts/`：预览、演示包生成、审计门禁、移动端检查、截图取证
+- `tests/`：单元/真值/浏览器端到端套件与公开 fixture（XRED MIT、Bruker UXD、MiniDIFDUP GPL-3 测试样本）
 - `docs/`：API（前端模块契约）、FITTING、DATA-SOURCE、VERIFICATION、DEPLOY
 
 ## 许可
-代码 MIT（LICENSE）。示例数据：COD CC0-1.0、XRED MIT；再分发保留来源链接与引用文本（见 docs/DATA-SOURCE.md）。
+代码 MIT（LICENSE）。部署数据：COD CC0-1.0、XRED / Raman Noodles MIT、Zenodo 15180744 CC BY 4.0；再分发保留来源链接与引用文本。`tests/fixtures/real/MiniDIFDUP.JDX` 为 GPL-3 测试样本，仅用于本地回归，不随 `web/` 部署（见 docs/DATA-SOURCE.md）。
 
 ## 文档
 [docs/API.md](docs/API.md) · [docs/FITTING.md](docs/FITTING.md) · [docs/DATA-SOURCE.md](docs/DATA-SOURCE.md) · [docs/VERIFICATION.md](docs/VERIFICATION.md) · [docs/DEPLOY.md](docs/DEPLOY.md)

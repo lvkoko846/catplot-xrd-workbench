@@ -64,8 +64,30 @@ if (existsSync(exPath)) {
   }
 }
 
+let demoSummary = '无演示数据文件';
+const demoPath = join(ROOT, 'web', 'data', 'demo-spectra.json');
+if (existsSync(demoPath)) {
+  const doc = JSON.parse(readFileSync(demoPath, 'utf8'));
+  const techniques = new Set();
+  if (doc.schema !== 'catplot-demo-spectra/v1') violations.push('demo-spectra: schema 不受支持');
+  if (!Array.isArray(doc.datasets) || !doc.datasets.length) violations.push('demo-spectra: 缺少数据集');
+  for (const d of doc.datasets || []) {
+    techniques.add(d.technique);
+    if (!['xrd', 'raman', 'ftir', 'xps'].includes(d.technique)) violations.push('demo-spectra: 未知表征 ' + d.id);
+    if (!['MIT', 'CC-BY-4.0'].includes(d.license)) violations.push('demo-spectra: 非白名单许可 ' + d.id + ' ' + d.license);
+    if (!/^https:\/\//.test(d.source_url || '') || !d.citation || d.citation.length <= 20) violations.push('demo-spectra: 来源/引用不完整 ' + d.id);
+    if (!d.x_unit || !d.y_unit) violations.push('demo-spectra: 缺少单位 ' + d.id);
+    if (!Array.isArray(d.x) || !Array.isArray(d.y) || d.x.length !== d.y.length || d.x.length < 2) violations.push('demo-spectra: 数据数组无效 ' + d.id);
+    else if (!d.x.every(Number.isFinite) || !d.y.every(Number.isFinite)) violations.push('demo-spectra: 含非有限数值 ' + d.id);
+    if (!['none', 'snip', 'shirley', 'manual'].includes(d.default_bg)) violations.push('demo-spectra: 推荐背景无效 ' + d.id);
+  }
+  for (const technique of ['xrd', 'raman', 'ftir', 'xps']) if (!techniques.has(technique)) violations.push('demo-spectra: 缺少表征 ' + technique);
+  demoSummary = (doc.datasets || []).length + ' 个真实公开谱 / ' + techniques.size + ' 种表征';
+}
+
 console.log('== 发布审计 ==  扫描文件 ' + files.length + ' 个（发布面：' + SCAN_DIRS.join(', ') + ' + README 数据扫描）');
 console.log('license 分布（' + distSource + '）：' + (distribution ? JSON.stringify(distribution) : '无示例卡文件'));
+console.log('演示数据：' + demoSummary);
 if (violations.length) {
   console.log('违规 ' + violations.length + ' 条：');
   violations.forEach(v => console.log('  FAIL ' + v));

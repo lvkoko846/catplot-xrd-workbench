@@ -4,7 +4,7 @@
 > 可部署于任意静态托管（含 Qoder Sites）或自托管静态服务器。历史的服务端/Sites 后端核查结论见文末附录。
 
 ## 产物
-`web/` 目录即完整产物（index.html + css/ + js/ + data/example-cards.json）。实测体积 < 1 MB（示例卡 6.9 KB）。
+`web/` 目录即完整产物（index.html + css/ + js/ + data/example-cards.json + data/demo-spectra.json）。当前实测约 2.4 MB，其中演示数据包约 137 KB；原生格式解析全部在浏览器内完成。
 无构建步骤、无依赖安装；直接托管即可。
 
 ## 本地预览
@@ -42,7 +42,8 @@ server {
 ## 发布门禁
 1. `node scripts/audit-release.mjs` PASS（无 .db/无 server/无受限品牌/无 API 客户端残留）。
 2. 全套测试绿（docs/VERIFICATION.md 第六节）。
-3. 示例数据许可随卡标注（CC0-1.0/MIT）+ 来源链接与引用文本保留（界面徽标/导出脚注）。
+3. 示例卡与演示谱许可随条目标注（CC0-1.0/MIT/CC BY 4.0）+ 来源链接与引用文本保留（界面徽标/导出脚注）。
+4. GPL-3 的 MiniDIFDUP 与真实 UXD 验收文件只保留在 `tests/fixtures/real/`，不得复制进 `web/`。
 
 ## 附录：历史服务端路线核查（已废弃）
 曾核查 Qoder Sites：单 `app` Edge Function（Deno）、托管 Supabase/Storage、无常驻 Node/SQLite；

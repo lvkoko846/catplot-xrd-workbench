@@ -12,4 +12,10 @@
   - 45 kV / 40 mA，步长 0.015592°，每步 0.5 s，耦合扫描（COUPLED）
   - 发散狭缝 0.15 mm（固定），防散射狭缝 12.38 mm
 - 物相未由本仓库标定；用于走通「导入→背景→寻峰→导出→保存恢复」全流程。
+- 文件：`MiniDIFDUP.JDX`（JCAMP-DX 4.24，584 点，2373.973–1804.104 cm⁻¹）
+- 来源：readJDX 开源项目的 `inst/extdata/MiniDIFDUP.JDX`
+  https://github.com/bryanhanson/readJDX/blob/main/inst/extdata/MiniDIFDUP.JDX
+  经 GitHub 原始文件下载（2026-11-25），内容未做数值修改。
+- 文件头许可：GPL-3；由 B. Hanson 根据 IUPAC `BRUKER1.JCM` 修改。
+- 真值元数据：`FIRSTX/LASTX`、`FIRSTY`、`MINY/MAXY`、`NPOINTS`；覆盖 SQZ/DIF/DIFDUP 与 X/Y 因子缩放。
 - 本目录数据只用于本地测试，不随 web/ 部署。

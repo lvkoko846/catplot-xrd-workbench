@@ -327,11 +327,21 @@
         if (!isFiniteNum(s.offset) || s.offset < 0) errors.push(label + '.offset 必须是 >= 0 的有限数值');
         if (typeof s.normalize !== 'boolean') errors.push(label + '.normalize 必须是布尔值');
         if (typeof s.visible !== 'boolean') errors.push(label + '.visible 必须是布尔值');
-        if (s.source !== 'file' && s.source !== 'sim') errors.push(label + '.source 必须是 file 或 sim');
+        if (s.source !== 'file' && s.source !== 'sim' && s.source !== 'demo') errors.push(label + '.source 必须是 file、sim 或 demo');
         var rx = checkPointArray(s.raw, 'x', errors, label + '.raw');
         var ry = checkPointArray(s.raw, 'y', errors, label + '.raw');
         if (rx && ry && rx.length !== ry.length) errors.push(label + '.raw.x 与 raw.y 长度不一致');
         if (rx) totalPoints += rx.length;
+        ['raw', 'working'].forEach(function (layerName) {
+          var layer = s[layerName];
+          if (!layer || layer.sourceLineNos == null) return;
+          var sx = layer.x || [];
+          if (!Array.isArray(layer.sourceLineNos) || layer.sourceLineNos.length !== sx.length) errors.push(label + '.' + layerName + '.sourceLineNos 长度必须与 x 一致');
+          else for (var si = 0; si < layer.sourceLineNos.length; si++) {
+            var sn = layer.sourceLineNos[si];
+            if (!isFiniteNum(sn) || sn < 1 || Math.floor(sn) !== sn) { errors.push(label + '.' + layerName + '.sourceLineNos 必须为正整数物理行号'); break; }
+          }
+        });
         if (s.raw && s.raw.lineNos != null) {
           if (!Array.isArray(s.raw.lineNos) || s.raw.lineNos.length !== (rx || []).length) errors.push(label + '.raw.lineNos 长度必须与 raw.x 一致');
           else {
@@ -416,10 +426,11 @@
             });
           }
           if (Array.isArray(meta.skippedRows)) {
+            var skippedLineSet = meta.format && meta.format !== 'table' && s.raw && Array.isArray(s.raw.sourceLineNos) ? new Set(s.raw.sourceLineNos) : rawLineSet;
             for (var sk = 0; sk < meta.skippedRows.length; sk++) {
               var e = meta.skippedRows[sk];
               if (!e || !isFiniteNum(e.lineNo) || typeof e.reason !== 'string' || !e.reason) { errors.push(label + '.importMeta.skippedRows[' + sk + '] 结构无效'); break; }
-              if (rawLineSet.has(e.lineNo)) { errors.push(label + '.importMeta.skippedRows 行 ' + e.lineNo + ' 同时存在于 raw，记录矛盾'); break; }
+              if (skippedLineSet && skippedLineSet.has(e.lineNo)) { errors.push(label + '.importMeta.skippedRows 行 ' + e.lineNo + ' 同时存在于 raw，记录矛盾'); break; }
             }
           }
           if (meta.xCol != null && meta.yCol != null && meta.xCol === meta.yCol) errors.push(label + '.importMeta.xCol 与 yCol 不得相同');

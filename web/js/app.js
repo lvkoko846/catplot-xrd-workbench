@@ -55,12 +55,22 @@
   function exportSamples() {
     return $('exportScope').value === 'all' ? state.samples.slice() : visibleSamples();
   }
-  function pointsToArrays(pts) {
-    return {
+  function pointsToArrays(pts, allSourcePoints) {
+    var sourceMap = new Map();
+    (allSourcePoints || pts).forEach(function (p) { if (p.sourceLine) sourceMap.set(p.lineNo, p.sourceLine); });
+    var out = {
       x: pts.map(function (p) { return p.x; }),
       y: pts.map(function (p) { return p.y; }),
       lineNos: pts.map(function (p) { return p.lineNo; })
     };
+    var merged = pts.some(function (p) { return !!p.mergedLineNos; });
+    var sourceLines = pts.map(function (p) {
+      var lines = p.mergedLineNos || [p.lineNo];
+      var vals = lines.map(function (ln) { return sourceMap.get(ln); });
+      return vals.every(function (v) { return v != null; }) ? (merged ? vals : vals[0]) : null;
+    });
+    if (sourceLines.length === pts.length && pts.length && sourceLines.every(function (v) { return v != null; })) out.sourceLineNos = sourceLines;
+    return out;
   }
 
   var toastTimer = null;
@@ -149,7 +159,7 @@
       source: opts.source || 'file',
       note: opts.note || '',
       raw: pointsToArrays(opts.rawPoints),
-      working: pointsToArrays(opts.workingPoints || opts.rawPoints),
+      working: pointsToArrays(opts.workingPoints || opts.rawPoints, opts.rawPoints),
       importMeta: opts.importMeta || null,
       bg: opts.bg || M.defaultBg(),
       peaks: opts.peaks || M.defaultPeaks(),
@@ -175,9 +185,10 @@
           id: s.id, name: s.name, color: s.color, lineWidth: s.lineWidth, visible: s.visible,
           offset: s.offset, normalize: s.normalize, source: s.source, note: s.note || '',
           raw: s.raw, working: s.working, importMeta: s.importMeta,
-          bg: s.bg, peaks: s.peaks
+          bg: s.bg, peaks: s.peaks, charge: s.charge
         };
       }),
+      technique: state.technique,
       settings: state.settings,
       selectedId: state.selectedId,
       refs: state.refs,
@@ -213,12 +224,13 @@
 
   function hydrateSavedSample(s) {
     var rawPts = s.raw.x.map(function (x, i) {
-      return { x: x, y: s.raw.y[i], lineNo: (s.raw.lineNos && s.raw.lineNos[i]) || i + 1 };
+      return { x: x, y: s.raw.y[i], lineNo: (s.raw.lineNos && s.raw.lineNos[i]) || i + 1, sourceLine: s.raw.sourceLineNos && s.raw.sourceLineNos[i] };
     });
     var w = s.working || s.raw;
     var wLineNos = w.lineNos || (w.x.length === s.raw.x.length ? rawPts.map(function (p) { return p.lineNo; }) : null);
     if (!wLineNos) return null;
     var workPts = w.x.map(function (x, i) { return { x: x, y: w.y[i], lineNo: wLineNos[i] }; });
+    if (Array.isArray(w.sourceLineNos)) workPts.forEach(function (p, i) { p.sourceLine = Array.isArray(w.sourceLineNos[i]) ? w.sourceLineNos[i][0] : w.sourceLineNos[i]; });
     var bg = M.defaultBg(), peaks = M.defaultPeaks(), charge = M.defaultCharge();
     if (s.bg && typeof s.bg === 'object') {
       bg.mode = ['none', 'snip', 'shirley', 'manual'].indexOf(s.bg.mode) !== -1 ? s.bg.mode : 'none';
@@ -241,10 +253,12 @@
       charge.refLabel = typeof s.charge.refLabel === 'string' ? s.charge.refLabel : '';
       charge.applied = !!s.charge.applied && charge.mode !== 'none';
     }
+    var savedWorking = pointsToArrays(workPts, rawPts);
+    if (Array.isArray(w.sourceLineNos)) savedWorking.sourceLineNos = w.sourceLineNos;
     return {
       id: s.id || uid(), name: s.name, color: s.color, lineWidth: s.lineWidth, visible: s.visible,
       offset: s.offset, normalize: s.normalize, source: s.source, note: s.note || '',
-      raw: pointsToArrays(rawPts), working: pointsToArrays(workPts), importMeta: s.importMeta || null,
+      raw: pointsToArrays(rawPts), working: savedWorking, importMeta: s.importMeta || null,
       bg: bg, peaks: peaks, charge: charge
     };
   }
@@ -266,6 +280,7 @@
       });
       state.samples = rebuilt;
       state.settings = Object.assign(state.settings, inner.settings || {});
+      state.technique = inner.technique || 'xrd';
       state.selectedId = inner.selectedId || (rebuilt[0] && rebuilt[0].id) || null;
       if (Array.isArray(inner.refs) && window.CatCards && !window.CatCards.validateRefs(inner.refs).length) state.refs = inner.refs;
       if (inner.lib && typeof inner.lib === 'object') {
@@ -353,23 +368,139 @@
   }
 
   /* ---------- 样品操作 ---------- */
-  function loadSimSamples() {
-    var defs = window.CatSamples.makeSimSamples();
-    var pending = defs.filter(function (d) {
-      return !state.samples.some(function (s) { return s.source === 'sim' && s.name === d.name; });
+  var demoState = { technique: 'xrd', doc: null, loading: false, error: null };
+  var demoRequest = null;
+
+  function validateDemoDoc(doc) {
+    if (!doc || doc.schema !== 'catplot-demo-spectra/v1' || !Array.isArray(doc.datasets) || !Array.isArray(doc.techniques)) throw new Error('演示数据包结构无效');
+    var licenses = ['MIT', 'CC-BY-4.0'];
+    doc.datasets.forEach(function (d) {
+      if (!d.id || !window.CatModel.TECHNIQUES[d.technique] || licenses.indexOf(d.license) === -1 || !d.source_url || !d.citation || !Array.isArray(d.x) || !Array.isArray(d.y) || d.x.length !== d.y.length || d.x.length < 3) throw new Error('演示条目 ' + (d.id || '?') + ' 缺少来源、许可或有效数据');
+      if (!d.x.every(function (x) { return isFinite(x); }) || !d.y.every(function (y) { return isFinite(y); })) throw new Error('演示条目 ' + d.id + ' 含非有限数值');
     });
-    if (pending.length) checkpoint('加载模拟示例');
-    pending.forEach(function (d) {
+    return doc;
+  }
+
+  function ensureDemoDoc() {
+    if (demoState.doc) return Promise.resolve(demoState.doc);
+    if (demoRequest) return demoRequest;
+    demoState.loading = true; demoState.error = null;
+    renderDemoPicker();
+    demoRequest = fetch('data/demo-spectra.json', { credentials: 'same-origin' }).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }).then(validateDemoDoc).then(function (doc) {
+      demoState.doc = doc;
+      return doc;
+    }).catch(function (e) {
+      demoState.error = '演示数据读取失败：' + e.message + '。请通过本地预览服务器打开，而非 file://。';
+      throw e;
+    }).finally(function () {
+      demoState.loading = false; demoRequest = null;
+      renderDemoPicker();
+    });
+    return demoRequest;
+  }
+
+  function demoCard(title, lines, actionLabel, onAction, meta) {
+    var card = document.createElement('article'); card.className = 'demo-card';
+    var h = document.createElement('h3'); h.textContent = title; card.appendChild(h);
+    lines.forEach(function (line) {
+      var p = document.createElement('p'); p.textContent = line; card.appendChild(p);
+    });
+    if (meta) card.appendChild(meta);
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'btn primary small'; b.textContent = actionLabel;
+    b.addEventListener('click', onAction); card.appendChild(b);
+    return card;
+  }
+
+  function renderDemoPicker() {
+    var tabs = $('demoTechTabs'); tabs.innerHTML = '';
+    var labels = { xrd: 'XRD', raman: '拉曼', ftir: '红外', xps: 'XPS' };
+    Object.keys(labels).forEach(function (id) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'btn small ghost' + (demoState.technique === id ? ' active' : '');
+      b.textContent = labels[id]; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', demoState.technique === id ? 'true' : 'false');
+      b.addEventListener('click', function () { demoState.technique = id; renderDemoPicker(); }); tabs.appendChild(b);
+    });
+    var list = $('demoList'); list.innerHTML = '';
+    var status = $('demoStatus');
+    if (demoState.error) { status.textContent = demoState.error; status.className = 'imp-summary imp-warnings'; }
+    else { status.textContent = demoState.doc ? '当前：' + labels[demoState.technique] + ' · 加载会替换当前样品，可撤销。' : '正在读取本地演示数据…'; status.className = 'imp-summary'; }
+    if (demoState.technique === 'xrd') {
+      list.appendChild(demoCard('模拟 XRD · 三样品系列', ['固定种子程序生成，非真实实验。适合演示堆叠、背景、寻峰、拟合、批量与报告。'], '加载模拟系列', function () { loadSimSamples(); closeDemoPicker(); }));
+    }
+    if (!demoState.doc) {
+      if (demoState.error) {
+        var retry = document.createElement('button'); retry.type = 'button'; retry.className = 'btn small'; retry.textContent = '重试读取';
+        retry.addEventListener('click', function () { demoState.error = null; ensureDemoDoc().catch(function () {}); }); list.appendChild(retry);
+      }
+      return;
+    }
+    demoState.doc.datasets.filter(function (d) { return d.technique === demoState.technique; }).forEach(function (d) {
+      var meta = document.createElement('div'); meta.className = 'demo-meta';
+      [d.x.length + ' 点', d.license, d.x_unit, d.y_unit].forEach(function (text) { var span = document.createElement('span'); span.className = 'tag'; span.textContent = text; meta.appendChild(span); });
+      var source = document.createElement('a'); source.href = d.source_url; source.target = '_blank'; source.rel = 'noopener noreferrer'; source.textContent = '查看数据来源'; meta.appendChild(source);
+      list.appendChild(demoCard(d.name, [d.note, '引用：' + d.citation], '加载此实验谱', function () { loadRealDemo(d); closeDemoPicker(); }, meta));
+    });
+  }
+
+  function closeDemoPicker() { $('demoModal').hidden = true; }
+  function openDemoPicker() {
+    demoState.technique = window.CatModel.TECHNIQUES[state.technique] ? state.technique : 'xrd';
+    $('demoModal').hidden = false;
+    renderDemoPicker();
+    ensureDemoDoc().catch(function () {});
+  }
+
+  function resetForDemo(label) {
+    checkpoint(label);
+    state.samples = []; state.selectedId = null; state.refs = []; state.phases = []; state.fit = null; state.batch = null; state.match = null;
+    state.lib = { wavelength: null, sticksOn: false };
+    state.settings = { title: 'XRD 图谱对比', xMin: null, xMax: null, yMin: null, yMax: null, showLegend: true, showGrid: true, stack: true, stackGap: 1.15, stackScale: 0.8 };
+    highlightPeakId = null; pickMode = null;
+    if (window.CatBatchUI) { CatBatchUI.ui.results = null; CatBatchUI.ui.aligned = null; CatBatchUI.ui.selected = {}; CatBatchUI.refresh(); }
+    if (window.CatMatchUI) { CatMatchUI.ui.last = null; CatMatchUI.ui.phases = []; CatMatchUI.ui.refs = []; }
+    if (window.CatFitUI) CatFitUI.refresh();
+  }
+
+  function loadSimSamples() {
+    resetForDemo('加载模拟 XRD 演示');
+    state.technique = 'xrd'; state.settings.title = '模拟 XRD 系列（程序生成）';
+    window.CatSamples.makeSimSamples().forEach(function (d) {
       var pts = d.raw.x.map(function (x, i) { return { x: x, y: d.raw.y[i], lineNo: i + 1 }; });
       makeSample({
         name: d.name, rawPoints: pts, source: 'sim', note: d.note,
-        importMeta: { source: 'sim', generator: 'CatPlot 内置模拟生成器（种子固定）', importedAt: new Date().toISOString(), skippedRows: [], merged: [], sortApplied: 'none' }
+        importMeta: { source: 'sim', format: 'sim', generator: 'CatPlot 内置模拟生成器（种子固定）', importedAt: new Date().toISOString(), skippedRows: [], merged: [], sortApplied: 'none' }
       });
     });
-    renderAll();
-    if (pending.length) toast('已加载 ' + pending.length + ' 条模拟示例曲线（程序生成，非真实实验数据）。', 'ok');
-    else toast('模拟示例已在列表中。');
+    state.selectedId = state.samples[0].id;
+    renderAll(); save();
+    toast('已加载 3 条模拟 XRD（程序生成，非真实实验）；可用撤销恢复替换前项目。', 'ok');
   }
+
+  function loadRealDemo(d) {
+    if (!d || !Array.isArray(d.x) || !Array.isArray(d.y)) return;
+    resetForDemo('加载演示「' + d.name + '」');
+    state.technique = d.technique; state.settings.title = d.name + ' · 公开实验演示';
+    var pts = d.x.map(function (x, i) { return { x: x, y: d.y[i], lineNo: i + 1, sourceLine: i + 1 }; });
+    var bg = M.defaultBg(); bg.mode = d.default_bg; bg.preview = true;
+    var peaks = M.defaultPeaks(); peaks.params = Object.assign(peaks.params, d.peak_params || {});
+    makeSample({
+      name: d.name, rawPoints: pts, source: 'demo', note: d.note, bg: bg, peaks: peaks,
+      importMeta: {
+        source: 'demo', format: 'demo-bundle', datasetId: d.id, fileName: d.file, license: d.license,
+        citation: d.citation, sourceUrl: d.source_url, xUnit: d.x_unit, yUnit: d.y_unit,
+        duplicateMode: 'keep', sortMode: 'sort', sortApplied: 'none', merged: [], skippedRows: [],
+        rawRecordCount: pts.length, importedAt: new Date().toISOString()
+      }
+    });
+    if (d.technique === 'xrd' && d.wavelength_angstrom > 0) state.lib.wavelength = d.wavelength_angstrom;
+    renderAll(); save();
+    toast('已加载「' + d.name + '」：' + pts.length + ' 点，' + d.license + ' 公开实验数据；推荐背景已设为预览。', 'ok');
+  }
+
+  $('demoClose').addEventListener('click', closeDemoPicker);
+  $('demoModal').addEventListener('click', function (ev) { if (ev.target === this) closeDemoPicker(); });
 
   function deleteSample(id) {
     var idx = state.samples.findIndex(function (s) { return s.id === id; });
@@ -460,6 +591,9 @@
       meta.appendChild(pts);
       if (s.source === 'sim') {
         var t = document.createElement('span'); t.className = 'tag sim'; t.textContent = '模拟数据'; meta.appendChild(t);
+      } else if (s.source === 'demo') {
+        var td = document.createElement('span'); td.className = 'tag'; td.textContent = '公开实验';
+        td.title = ((s.importMeta && s.importMeta.license) || '') + ' · ' + ((s.importMeta && s.importMeta.sourceUrl) || ''); meta.appendChild(td);
       } else {
         var tf = document.createElement('span'); tf.className = 'tag'; tf.textContent = '文件';
         tf.title = (s.importMeta && s.importMeta.fileName) || '';
@@ -664,7 +798,7 @@
       ['显示点数', (function () { var v = viewOf(s); return v ? v.kept + (v.mode === 'dec' ? '（窗口 ' + v.inWindow + ' 点降采样）' : '（全量）') : '未显示'; })()],
       ['背景', s.bg && s.bg.applied ? bgName(s.bg) + ' 已扣除' : (s.bg && s.bg.mode !== 'none' ? '预览中（未扣除）' : '无')],
       ['实验峰', s.peaks ? s.peaks.list.length + (peaksStale(s) ? '（待更新）' : '') : '0'],
-      ['来源', s.source === 'sim' ? '内置模拟数据' : ((s.importMeta && s.importMeta.fileName) || '上传文件')]
+      ['来源', s.source === 'sim' ? '内置模拟数据' : (s.source === 'demo' ? ('内置公开演示 · ' + ((s.importMeta && s.importMeta.license) || '')) : ((s.importMeta && s.importMeta.fileName) || '上传文件'))]
     ];
     rows.forEach(function (r) {
       var dt = document.createElement('dt'); dt.textContent = r[0];
@@ -748,7 +882,31 @@
       line('生成时间：' + (meta.importedAt || '—'));
       return;
     }
+    if (meta.source === 'demo') {
+      line('来源：内置公开实验演示 · ' + (meta.license || '—'));
+      line('数据：' + (meta.fileName || '—'));
+      line('引用：' + (meta.citation || '—'));
+      line('链接：' + (meta.sourceUrl || '—'));
+      line('单位：' + (meta.xUnit || '—') + ' / ' + (meta.yUnit || '—'));
+      line('加载时间：' + (meta.importedAt || '—'));
+      return;
+    }
     line('文件：' + (meta.fileName || '—'));
+    if (meta.format === 'jcamp' || meta.format === 'uxd') {
+      var n = meta.native || {};
+      line('原生格式：' + (meta.format === 'jcamp' ? 'JCAMP-DX' : 'Bruker UXD') + (n.title ? ' · ' + n.title : '') + (n.sample ? ' · ' + n.sample : ''));
+      if (meta.format === 'jcamp') line('压缩/变量表：' + (n.compression || '—') + ' · ' + (n.dataGuide || '—') + (n.nPoints != null ? ' · NPOINTS=' + n.nPoints : ''));
+      if (meta.format === 'uxd') line('阳极/波长：' + (n.anode || '—') + ' / ' + (n.wavelength != null ? n.wavelength + ' Å' : '—') + (n.dateMeasured ? ' · ' + n.dateMeasured : ''));
+      (meta.warnings || []).forEach(function (w) { line('　解析提示：' + w); });
+      line('数值行：X 第 1 列 / Y 第 2 列（由原生格式解码）；原始文件行号保留于 raw.sourceLineNos');
+      line('导入时间：' + (meta.importedAt || '—'));
+      line('排序：' + (meta.sortApplied === 'asc' ? '已生成升序独立副本（原始解码顺序保留于 raw）' : '未排序（保持文件解码顺序）'));
+      line('重复 X：' + (meta.duplicateMode === 'merge' ? '按 X 平均合并 ' + (meta.merged || []).length + ' 组' : '保留全部重复点'));
+      var nativeSkipped = meta.skippedRows || [];
+      nativeSkipped.slice(0, 20).forEach(function (e) { line('　第 ' + e.lineNo + ' 行：' + e.reason); });
+      if (nativeSkipped.length > 20) line('　……其余 ' + (nativeSkipped.length - 20) + ' 行见项目 JSON');
+      return;
+    }
     line('分隔符：' + (meta.delimiter === 'ws' ? '空白' : meta.delimiter === '\t' ? '制表符' : meta.delimiter) +
       ' · 跳过文件头 ' + meta.skipRows + ' 行 · X 第 ' + (meta.xCol + 1) + ' 列 · Y 第 ' + (meta.yCol + 1) + ' 列');
     line('导入时间：' + (meta.importedAt || '—'));
@@ -1639,7 +1797,7 @@
     if (!list.length) { toast('当前导出范围内没有数据。', 'err'); return; }
     var lines = ['样品名称,原始行号,2theta(deg),原始强度,分析强度,显示偏移,显示强度,处理方式,数据来源'];
     list.forEach(function (s) {
-      var src = s.source === 'sim' ? '模拟数据(程序生成)' : '上传文件:' + ((s.importMeta && s.importMeta.fileName) || '');
+      var src = s.source === 'sim' ? '模拟数据(程序生成)' : (s.source === 'demo' ? ('内置公开演示:' + ((s.importMeta && s.importMeta.license) || '') + ':' + ((s.importMeta && s.importMeta.sourceUrl) || '')) : '上传文件:' + ((s.importMeta && s.importMeta.fileName) || ''));
       var idxByLine = new Map();
       s.working.lineNos.forEach(function (ln, i) { idxByLine.set(ln, i); });
       if (s.importMeta && s.importMeta.merged) {
@@ -1742,7 +1900,7 @@
   });
 
   /* ---------- 导入对话框 ---------- */
-  var imp = { queue: [], index: 0, text: '', fileName: '', result: null, ackSig: null };
+  var imp = { queue: [], index: 0, text: '', fileName: '', format: 'table', result: null, ackSig: null };
 
   function delimValue() {
     var v = $('impDelim').value;
@@ -1753,8 +1911,8 @@
     return {
       delimiter: delimValue(),
       skipRows: Number($('impSkip').value) || 0,
-      xCol: Number($('impX').value) || 0,
-      yCol: Number($('impY').value) || 0,
+      xCol: imp.format === 'table' ? Number($('impX').value) || 0 : 0,
+      yCol: imp.format === 'table' ? Number($('impY').value) || 0 : 1,
       duplicateMode: document.querySelector('input[name="dupMode"]:checked').value,
       sortMode: document.querySelector('input[name="sortMode"]:checked').value
     };
@@ -1769,14 +1927,18 @@
     var f = imp.queue[imp.index];
     imp.text = f.text;
     imp.fileName = f.name;
+    imp.format = window.CatParser.detectFormat(imp.text, f.name);
     imp.ackSig = null;
     $('impFileMeta').textContent = f.name + ' · ' + (f.size / 1024).toFixed(1) + ' KB' +
       (imp.queue.length > 1 ? ' · 文件 ' + (imp.index + 1) + ' / ' + imp.queue.length : '');
     $('impQueue').textContent = imp.queue.length > 1 ? '多文件导入：' + (imp.index + 1) + ' / ' + imp.queue.length : '';
     $('impName').value = f.name.replace(/\.[^.]+$/, '');
+    var native = imp.format !== 'table';
+    ['impDelim', 'impSkip', 'impX', 'impY'].forEach(function (id) { $(id).disabled = native; });
+    ['impDelimField', 'impSkipField', 'impXField', 'impYField'].forEach(function (id) { $(id).hidden = native; });
     $('impDelim').value = 'auto';
     var d = window.CatParser.detectDelimiter(imp.text);
-    $('impSkip').value = window.CatParser.suggestSkip(imp.text, d, 0, 1);
+    $('impSkip').value = native ? 0 : window.CatParser.suggestSkip(imp.text, d, 0, 1);
     document.querySelector('input[name="dupMode"][value="keep"]').checked = true;
     document.querySelector('input[name="sortMode"][value="sort"]').checked = true;
     $('impAck').checked = false;
@@ -1785,7 +1947,7 @@
   }
   function closeImport() {
     $('importModal').hidden = true;
-    imp.queue = []; imp.index = 0; imp.text = ''; imp.result = null; imp.ackSig = null;
+    imp.queue = []; imp.index = 0; imp.text = ''; imp.format = 'table'; imp.result = null; imp.ackSig = null;
   }
 
   function fillColumnSelects(maxCols, keep) {
@@ -1809,10 +1971,11 @@
 
   function updateImportPreview(rebuildCols) {
     var opts = impOpts();
-    var r = window.CatParser.analyze(imp.text, opts);
+    var parse = imp.format === 'table' ? window.CatParser.analyze : window.CatParser.analyzeNative;
+    var r = imp.format === 'table' ? parse(imp.text, opts) : parse(imp.text, imp.format, opts);
     imp.result = r;
 
-    if (rebuildCols || $('impX').options.length !== Math.max(1, r.maxCols)) {
+    if (imp.format === 'table' && (rebuildCols || $('impX').options.length !== Math.max(1, r.maxCols))) {
       fillColumnSelects(Math.max(1, r.maxCols), !rebuildCols);
       opts = impOpts();
       r = window.CatParser.analyze(imp.text, opts);
@@ -1820,6 +1983,25 @@
     }
 
     var xCol = opts.xCol, yCol = opts.yCol;
+    var nativeBox = $('impNativeMeta');
+    nativeBox.hidden = imp.format === 'table';
+    if (imp.format !== 'table') {
+      nativeBox.innerHTML = '';
+      var n = r.native || {}, dl = document.createElement('dl');
+      var fields = [['格式', imp.format === 'jcamp' ? 'JCAMP-DX' : 'Bruker UXD']];
+      if (imp.format === 'jcamp') fields.push(['标题', n.title || '—'], ['X / Y 单位', (n.xUnits || '—') + ' / ' + (n.yUnits || '—')], ['变量表', n.dataGuide || '—'], ['压缩方式', n.compression || '—'], ['声明点数', n.nPoints != null ? n.nPoints : '—'], ['X / Y 因子', (n.xFactor != null ? n.xFactor : '—') + ' / ' + (n.yFactor != null ? n.yFactor : '—')], ['X 步长', n.xStep != null ? n.xStep + '（按首末点重建）' : (n.deltaX != null ? n.deltaX + '（文件头）' : '—')]);
+      else fields.push(['样品', n.sample || '—'], ['测量日期', n.dateMeasured || '—'], ['阳极 / λ₁', (n.anode || '—') + ' / ' + (n.wavelength != null ? n.wavelength + ' Å' : '—')], ['步长 / 步时', (n.stepSize != null ? n.stepSize : '—') + ' / ' + (n.stepTime != null ? n.stepTime + ' s' : '—')], ['管压 / 管流', (n.voltage != null ? n.voltage + ' kV' : '—') + ' / ' + (n.current != null ? n.current + ' mA' : '—')]);
+      fields.forEach(function (pair) { var dt = document.createElement('dt'), dd = document.createElement('dd'); dt.textContent = pair[0]; dd.textContent = pair[1]; dl.appendChild(dt); dl.appendChild(dd); });
+      nativeBox.appendChild(dl);
+    }
+    var warnBox = $('impWarnings');
+    warnBox.hidden = !(r.warnings && r.warnings.length);
+    warnBox.innerHTML = '';
+    if (r.warnings && r.warnings.length) {
+      var wul = document.createElement('ul');
+      r.warnings.forEach(function (w) { var li = document.createElement('li'); li.textContent = w; wul.appendChild(li); });
+      warnBox.appendChild(wul);
+    }
     var table = $('impTable');
     table.innerHTML = '';
     var thead = document.createElement('thead');
@@ -1836,7 +2018,7 @@
     var tbody = document.createElement('tbody');
     r.preview.forEach(function (row) {
       var tr = document.createElement('tr');
-      var td0 = document.createElement('td'); td0.textContent = row.lineNo; tr.appendChild(td0);
+      var td0 = document.createElement('td'); td0.textContent = row.sourceLine || row.lineNo; tr.appendChild(td0);
       for (var c2 = 0; c2 < r.maxCols; c2++) {
         var td = document.createElement('td');
         var v = row.cells[c2];
@@ -1852,9 +2034,10 @@
 
     var sum = $('impSummary');
     var detected = r.delimiter === 'ws' ? '空白' : r.delimiter === '\t' ? '制表符' : r.delimiter === ',' ? '逗号' : r.delimiter;
-    var html = '分隔符：<b>' + window.CatChart.esc(detected) + '</b> · 跳过文件头 <b>' + r.skippedHeader +
-      '</b> 行 · 数据行 <b>' + r.dataRows + '</b> · 空行 ' + r.blankRows +
-      ' · <span class="ok">有效数据点 ' + r.points.length + '</span>';
+    var html = imp.format === 'table'
+      ? ('分隔符：<b>' + window.CatChart.esc(detected) + '</b> · 跳过文件头 <b>' + r.skippedHeader + '</b> 行 · 数据行 <b>' + r.dataRows + '</b> · 空行 ' + r.blankRows)
+      : ('原生格式：<b>' + (imp.format === 'jcamp' ? 'JCAMP-DX' : 'Bruker UXD') + '</b> · 解码数据行 <b>' + r.dataRows + '</b> · 行号为原文件物理行');
+    html += ' · <span class="ok">有效数据点 ' + r.points.length + '</span>';
     if (r.errors.length) html += ' · <span class="warn">无效行 ' + r.errors.length + '</span>';
     if (r.sortApplied === 'asc') html += ' · 将生成升序独立副本（原始顺序保留）';
     if (opts.duplicateMode === 'merge' && r.merged.length) html += ' · 合并重复 X ' + r.merged.length + ' 组';
@@ -1917,7 +2100,11 @@
   $('impCancel').addEventListener('click', closeImport);
   $('impClose').addEventListener('click', closeImport);
   $('importModal').addEventListener('click', function (ev) { if (ev.target === this) closeImport(); });
-  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && !$('importModal').hidden) closeImport(); });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Escape') return;
+    if (!$('importModal').hidden) closeImport();
+    else if (!$('demoModal').hidden) closeDemoPicker();
+  });
 
   $('impConfirm').addEventListener('click', function () {
     var r = imp.result;
@@ -1932,6 +2119,7 @@
       source: 'file',
       importMeta: {
         fileName: imp.fileName,
+        format: imp.format,
         delimiter: r.delimiter,
         skipRows: opts.skipRows,
         xCol: opts.xCol,
@@ -1941,6 +2129,8 @@
         sortApplied: r.sortApplied,
         merged: r.merged,
         skippedRows: r.errors,
+        native: r.native || null,
+        warnings: r.warnings || [],
         rawRecordCount: r.rawPoints.length,
         importedAt: new Date().toISOString()
       }
@@ -1967,12 +2157,12 @@
   });
 
   /* ---------- 文件上传 ---------- */
-  var ALLOWED = /\.(csv|txt|tsv|dat)$/i;
+  var ALLOWED = /\.(csv|txt|tsv|dat|jdx|jcamp|dx|uxd)$/i;
   function handleFiles(fileList) {
     var files = Array.prototype.slice.call(fileList);
     var ok = [], rejected = [];
     files.forEach(function (f) {
-      if (!ALLOWED.test(f.name)) { rejected.push(f.name + '（不支持的格式，仅接受 CSV / TXT / TSV / DAT）'); return; }
+      if (!ALLOWED.test(f.name)) { rejected.push(f.name + '（不支持的格式，仅接受 CSV / TXT / TSV / DAT / JCAMP-DX / UXD）'); return; }
       if (f.size > MAX_FILE_MB * 1024 * 1024) { rejected.push(f.name + '（超过 ' + MAX_FILE_MB + ' MB 上限）'); return; }
       if (f.size === 0) { rejected.push(f.name + '（文件为空）'); return; }
       ok.push(f);
@@ -1996,7 +2186,7 @@
     $(id).addEventListener('click', function () { $('fileInput').click(); });
   });
   ['btnSampleTop', 'btnSampleSide', 'btnSampleEmpty'].forEach(function (id) {
-    $(id).addEventListener('click', loadSimSamples);
+    $(id).addEventListener('click', openDemoPicker);
   });
 
   /* 拖拽导入 */
