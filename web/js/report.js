@@ -8,6 +8,7 @@
   'use strict';
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function f(v, d) { return v == null || !isFinite(v) ? '—' : (+v).toFixed(d == null ? 3 : d); }
+  var FORMAT_NAMES = { table: '表格文本', jcamp: 'JCAMP-DX', uxd: 'Bruker UXD', xrdml: 'PANalytical XRDML', ras: 'Rigaku RAS', spa: 'OMNIC/OPUS SPA' };
 
   function table(headers, rows) {
     if (!rows || !rows.length) return '<p class="note">（无）</p>';
@@ -39,6 +40,13 @@
       H.push('<h3>参考/示例数据溯源</h3>');
       H.push(table(['名称', '许可', '来源', '链接', '说明'], p.provenance.map(function (q) { return [q.name, q.license, q.source, q.url || '—', q.note || '']; })));
     }
+    var imported = (p.samples || []).filter(function (s) { return s.source === 'file'; });
+    if (imported.length) {
+      H.push('<h3>导入质量与警告</h3>');
+      H.push(table(['样品', '格式', '原始 / 分析点', '跳过无效行', '导入警告'], imported.map(function (s) {
+        return [s.name, FORMAT_NAMES[s.format] || s.format || '—', s.points + ' / ' + (s.workingPoints == null ? '—' : s.workingPoints), s.skippedRows || 0, (s.warnings || []).join('；') || '无'];
+      })));
+    }
     H.push('</section>');
 
     /* 对比图 */
@@ -60,9 +68,13 @@
     /* 批量趋势 */
     if (p.batchResults && p.batchResults.length) {
       H.push('<section><h2>四、系列样品批量趋势</h2>');
+      var batchOk = p.batchResults.filter(function (r) { return r.ok; }).length;
+      var batchSkipped = p.batchResults.filter(function (r) { return r.skipped; }).length;
+      var batchFailed = p.batchResults.length - batchOk - batchSkipped;
+      H.push('<p class="note">批量结果：成功 ' + batchOk + ' · 失败 ' + batchFailed + ' · 取消/跳过 ' + batchSkipped + '。</p>');
       if (p.trendSvg) H.push('<div class="fig">' + p.trendSvg + '</div>');
       H.push(table(['样品', 'X', '状态', '峰数', 'Rwp', '原因'], p.batchResults.map(function (r) {
-        return [r.name, f(r.xValue, 2), r.ok ? '成功' : '失败', r.ok ? r.params.length : 0, r.ok && r.quality ? f(r.quality.rwp, 4) : '—', r.ok ? '' : r.reason];
+        return [r.name, f(r.xValue, 2), r.ok ? '成功' : (r.skipped ? '取消/跳过' : '失败'), r.ok ? r.params.length : 0, r.ok && r.quality ? f(r.quality.rwp, 4) : '—', r.ok ? '' : r.reason];
       })));
       /* 每样品全部特征峰（多峰样品不截断）；d/D 仅 XRD */
       var isX = p.xrd !== false;

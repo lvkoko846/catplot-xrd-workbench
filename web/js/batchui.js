@@ -1,5 +1,5 @@
 /* CatPlot 系列样品批量分析面板（batch-1）：样品选择 + 共享区间/峰型/背景/寻峰设置 →
-   Worker 逐样品拟合（复用 fitworker/fitcore）→ 跨样品峰对齐 → 趋势图（峰位/d/FWHM/面积/晶粒尺寸）
+   Worker 逐样品拟合（复用 batchcore/fitcore）→ 跨样品峰对齐 → 趋势图（峰位/d/FWHM/面积/晶粒尺寸）
    + 结果汇总表 + 趋势/汇总 CSV + 趋势 PNG/SVG。恒用 raw 原始层；失败给具体原因；可取消。
    晶粒尺寸为 Scherrer 表观值，未扣仪器宽化时强制警示。不做物相定量。 */
 (function () {
@@ -10,9 +10,14 @@
   function f(v, d) { return v == null || !isFinite(v) ? '—' : (+v).toFixed(d == null ? 3 : d); }
   var PALETTE = ['#2563eb', '#e11d48', '#059669', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#65a30d'];
 
-  var ui = { worker: null, seq: 0, pending: {}, running: false, cancelFlag: false, results: null, aligned: null, selected: {} };
+  var ui = { worker: null, workerDisabled: false, cancelTimer: null, seq: 0, pending: {}, running: false, cancelFlag: false, results: null, aligned: null, selected: {} };
 
-  function status(msg, kind) { var el = $('batchStatus'); el.textContent = msg; el.className = 'hint ' + (kind === 'err' ? 'mt-err' : kind === 'ok' ? 'mt-ok' : 'process-note'); }
+  function status(msg, kind) {
+    var el = $('batchStatus');
+    el.textContent = msg;
+    el.className = 'hint ' + (kind === 'err' ? 'mt-err' : kind === 'ok' ? 'mt-ok' : 'process-note');
+    el.dataset.engine = ui.workerDisabled ? 'main' : 'worker';
+  }
   function samples() { return App.state.samples; }
   function selIds() { return samples().filter(function (s) { return ui.selected[s.id]; }).map(function (s) { return s.id; }); }
 
@@ -53,53 +58,110 @@
   }
 
   /* ---------- Worker 批量 ---------- */
+  function settlePending(result) {
+    var callbacks = ui.pending;
+    ui.pending = {};
+    Object.keys(callbacks).forEach(function (id) { callbacks[id](result); });
+  }
+  function stopWorker(cancelResult) {
+    clearTimeout(ui.cancelTimer);
+    ui.cancelTimer = null;
+    if (ui.worker) {
+      var worker = ui.worker;
+      ui.worker = null;
+      worker.onmessage = null;
+      worker.onerror = null;
+      worker.terminate();
+    }
+    if (cancelResult) settlePending({ ok: false, reason: 'cancelled' });
+    else settlePending(null);
+  }
   function ensureWorker() {
     if (ui.worker) return ui.worker;
-    ui.worker = new Worker('js/fitworker.js');
-    ui.worker.onmessage = function (e) { var m = e.data, cb = ui.pending[m.id]; if (!cb) return; delete ui.pending[m.id]; cb(m.res); };
-    ui.worker.onerror = function (e) { status('批量 Worker 出错：' + (e.message || '未知'), 'err'); ui.running = false; $('btnBatchCancel').hidden = true; $('btnBatchRun').disabled = false; };
+    if (ui.workerDisabled || typeof Worker === 'undefined') { ui.workerDisabled = true; return null; }
+    try {
+      ui.worker = new Worker('js/batchworker.js');
+    } catch (e) {
+      ui.workerDisabled = true;
+      return null;
+    }
+    ui.worker.onmessage = function (event) {
+      var message = event.data || {}, callback = ui.pending[message.id];
+      clearTimeout(ui.cancelTimer);
+      ui.cancelTimer = null;
+      if (!callback) return;
+      delete ui.pending[message.id];
+      callback(message.res);
+    };
+    ui.worker.onerror = function () {
+      ui.workerDisabled = true;
+      stopWorker(false);
+    };
     return ui.worker;
   }
-  /* 复用 batchcore.fitSample（与 Node 真值测试同路径）：auto 寻峰初值（突出度抗噪）+ raw 层 +
-     Scherrer 表观值。fitSample 内部 await Core.fit；Worker 仅用于取消时 terminate 兜底。 */
-  function fitOne(w, sample, settings) {
-    return Batch.fitSample(sample, settings, { isCancelled: function () { return ui.cancelFlag; } });
+  function fitOne(sample, settings) {
+    var worker = ensureWorker();
+    if (!worker) return Batch.fitSample(sample, settings, { isCancelled: function () { return ui.cancelFlag; } });
+    return new Promise(function (resolve) {
+      var id = ++ui.seq;
+      ui.pending[id] = resolve;
+      try { worker.postMessage({ id: id, sample: sample, settings: settings }); }
+      catch (e) { delete ui.pending[id]; resolve(null); }
+    }).then(function (result) {
+      if (result) return result;
+      ui.workerDisabled = true;
+      status('批量 Worker 不可用，改用主线程兼容模式。', 'err');
+      return Batch.fitSample(sample, settings, { isCancelled: function () { return ui.cancelFlag; } });
+    });
   }
   async function runBatch() {
     var settings = readSettings(), ss = settings._samples;
     if (!ss.length) { status('请先选择至少一个样品。', 'err'); return; }
     if (!(settings.region.max > settings.region.min)) { status('区间无效：止须大于起。', 'err'); return; }
     if (settings.xMode === 'value' && settings.xValues.some(function (v) { return v == null; })) { status('组分值模式：请为每个选中样品填写组分值。', 'err'); return; }
-    var w = ensureWorker();
     ui.running = true; ui.cancelFlag = false; ui.results = [];
     $('btnBatchRun').disabled = true; $('btnBatchCancel').hidden = false; $('batchProgress').hidden = false;
+    $('batchProgressBar').style.width = '0%';
     status('批量分析中（0/' + ss.length + '）…');
     for (var i = 0; i < ss.length; i++) {
-      if (ui.cancelFlag) { ui.results.push({ id: ss[i].id, name: ss[i].name, index: i, ok: false, reason: 'cancelled: 批量已取消', skipped: true, xValue: settings.xMode === 'value' ? settings.xValues[i] : i + 1 }); continue; }
       var s = ss[i];
-      var res = await fitOne(w, s, settings);
-      var r = Object.assign({}, res, { id: s.id, name: s.name, index: i, xValue: settings.xMode === 'value' ? settings.xValues[i] : i + 1 });
+      var r;
+      if (ui.cancelFlag) {
+        r = { ok: false, reason: 'cancelled: 批量已取消', skipped: true };
+      } else {
+        var res = await fitOne(s, settings);
+        r = Object.assign({}, res, { id: s.id, name: s.name, index: i, xValue: settings.xMode === 'value' ? settings.xValues[i] : i + 1 });
+        if (ui.cancelFlag || r.reason === 'cancelled') r = { ok: false, reason: 'cancelled: 批量已取消', skipped: true };
+      }
+      r.id = s.id; r.name = s.name; r.index = i; r.xValue = settings.xMode === 'value' ? settings.xValues[i] : i + 1;
       ui.results.push(r);
       $('batchProgressBar').style.width = (100 * (i + 1) / ss.length) + '%';
       status('批量分析中（' + (i + 1) + '/' + ss.length + '）…' + (r.ok ? '' : ' ' + s.name + '：' + r.reason));
     }
+    clearTimeout(ui.cancelTimer);
+    ui.cancelTimer = null;
     ui.running = false; $('btnBatchCancel').hidden = true; $('btnBatchRun').disabled = false;
     var batch = { results: ui.results, settings: settings, at: new Date().toISOString(), algo: 'batch-1' };
     ui.aligned = Batch.alignPeaks(batch, { tol: +$('batchTol').value || 1.0 });
     App.state.batch = { settings: { region: settings.region, shape: settings.shape, bg: settings.bg, minHeight: settings.minHeight, minDist: settings.minDist, lambda: settings.lambda, K: settings.K, instrument: settings.instrument, xMode: settings.xMode, xValues: settings.xValues, tol: +$('batchTol').value || 1.0 }, results: ui.results, at: batch.at };
-    App.checkpoint('系列批量分析 ' + ss.length + ' 样品（' + ui.results.filter(function (r) { return r.ok; }).length + ' 成功，batch-1）');
-    App.save();
     var okN = ui.results.filter(function (r) { return r.ok; }).length;
-    status('批量完成：' + okN + '/' + ss.length + ' 成功。' + (okN < ss.length ? ' 失败样品见汇总表（含具体原因）。' : '') + ' 晶粒尺寸为表观值（未扣仪器宽化时偏小）。', okN === ss.length ? 'ok' : 'err');
+    var skippedN = ui.results.filter(function (r) { return r.skipped; }).length;
+    App.checkpoint('系列批量分析 ' + ss.length + ' 样品（' + okN + ' 成功' + (skippedN ? '，' + skippedN + ' 跳过' : '') + '，batch-1）');
+    App.save();
+    if (skippedN) status('批量已取消：' + okN + '/' + ss.length + ' 成功，' + skippedN + ' 个样品跳过。已完成结果保留。', 'err');
+    else status('批量完成：' + okN + '/' + ss.length + ' 成功。' + (okN < ss.length ? ' 失败样品见汇总表（含具体原因）。' : '') + ' 晶粒尺寸为表观值（未扣仪器宽化时偏小）。', okN === ss.length ? 'ok' : 'err');
     renderAnchorSelect(); renderTrend(); renderSummary();
-    /* 趋势图在右侧滚动面板下方，运行后自动滚入视，避免"看不到趋势" */
     try { $('batchTrendChart').scrollIntoView({ block: 'center', behavior: 'auto' }); } catch (e) {}
   }
   function cancelBatch() {
     if (!ui.running) return;
     ui.cancelFlag = true;
-    if (ui.worker) { ui.worker.postMessage({ cancel: true }); setTimeout(function () { if (ui.running && ui.worker) { ui.worker.terminate(); ui.worker = null; } }, 1500); }
-    status('取消中…当前样品完成后停止。');
+    if (ui.worker) {
+      try { ui.worker.postMessage({ cancel: true }); } catch (e) {}
+      clearTimeout(ui.cancelTimer);
+      ui.cancelTimer = setTimeout(function () { if (ui.running) stopWorker(true); }, 1500);
+    }
+    status('取消中…当前样品将在下一迭代停止。');
   }
 
   /* ---------- 趋势图 ---------- */
@@ -266,7 +328,7 @@
     box.innerHTML = '<table class="preview-table mt-table"><thead><tr><th>#</th><th>样品</th><th>X</th><th>状态</th><th>峰数</th><th>Rwp</th><th>首峰 2θ</th><th>首峰 FWHM</th><th>首峰 D(nm)</th><th>原因</th></tr></thead><tbody>' +
       rs.map(function (r) {
         var p0 = r.ok && r.params && r.params[0];
-        return '<tr><td>' + (r.index + 1) + '</td><td>' + esc(r.name) + '</td><td>' + f(r.xValue, 2) + '</td><td>' + (r.ok ? '<span class="mt-ok">成功</span>' : '<span class="mt-err">失败</span>') + '</td><td>' + (r.ok ? r.params.length : 0) + '</td><td>' + (r.ok && r.quality ? f(r.quality.rwp, 4) : '—') + '</td><td>' + (p0 ? f(p0.c, 3) : '—') + '</td><td>' + (p0 ? f(p0.w, 4) : '—') + '</td><td>' + (p0 && p0.D != null ? f(p0.D, 2) + (p0.Dapparent ? '*' : '') : '—') + '</td><td class="hint">' + esc(r.ok ? '' : r.reason) + '</td></tr>';
+        return '<tr><td>' + (r.index + 1) + '</td><td>' + esc(r.name) + '</td><td>' + f(r.xValue, 2) + '</td><td>' + (r.ok ? '<span class="mt-ok">成功</span>' : (r.skipped ? '<span class="mt-warn">已取消</span>' : '<span class="mt-err">失败</span>')) + '</td><td>' + (r.ok ? r.params.length : 0) + '</td><td>' + (r.ok && r.quality ? f(r.quality.rwp, 4) : '—') + '</td><td>' + (p0 ? f(p0.c, 3) : '—') + '</td><td>' + (p0 ? f(p0.w, 4) : '—') + '</td><td>' + (p0 && p0.D != null ? f(p0.D, 2) + (p0.Dapparent ? '*' : '') : '—') + '</td><td class="hint">' + esc(r.ok ? '' : r.reason) + '</td></tr>';
       }).join('') + '</tbody></table><p class="hint">* 表观晶粒尺寸（未扣仪器宽化，系统性偏小）。失败样品保留具体原因，不静默跳过。首峰仅为速览，全部特征峰见下表与「全峰 CSV」。</p>' + allPeaksTable(rs);
   }
   function allPeaksTable(rs) {

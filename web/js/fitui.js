@@ -8,7 +8,7 @@
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function f(v, d) { return v == null || !isFinite(v) ? '—' : (+v).toFixed(d == null ? 3 : d); }
-  var ui = { worker: null, seq: 0, pending: {}, running: false, dragMode: false, dragPeak: null, regionDrag: null, legend: {}, finishedAt: 0 };
+  var ui = { worker: null, workerDisabled: false, cancelFlag: false, seq: 0, pending: {}, running: false, dragMode: false, dragPeak: null, regionDrag: null, legend: {}, finishedAt: 0 };
   function FS() {
     if (!App.state.fit) App.state.fit = { regions: [], active: null, instrument: { mode: 'none', fwhm: null, std: null }, K: 0.89, dbVersion: null };
     return App.state.fit;
@@ -19,23 +19,38 @@
   function status(msg, kind) { var el = $('fitStatus'); el.textContent = msg; el.className = 'hint ' + (kind === 'err' ? 'mt-err' : kind === 'ok' ? 'mt-ok' : 'process-note'); }
   function newId() { return 'fr' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
+  function finishFit() {
+    ui.running = false; ui.finishedAt = Date.now();
+    $('btnFitCancel').hidden = true; $('btnFitRun').disabled = false;
+  }
   function ensureWorker() {
     if (ui.worker) return ui.worker;
-    ui.worker = new Worker('js/fitworker.js');
+    if (ui.workerDisabled || typeof Worker === 'undefined') { ui.workerDisabled = true; return null; }
+    try { ui.worker = new Worker('js/fitworker.js'); }
+    catch (e) { ui.workerDisabled = true; return null; }
     ui.worker.onmessage = function (e) {
       var m = e.data, cb = ui.pending[m.id];
       if (!cb) return;
       delete ui.pending[m.id];
-      ui.running = false; ui.finishedAt = Date.now();
-      $('btnFitCancel').hidden = true; $('btnFitRun').disabled = false;
+      finishFit();
       cb(m.res);
     };
     ui.worker.onerror = function (e) {
-      ui.running = false; ui.finishedAt = Date.now();
-      $('btnFitCancel').hidden = true; $('btnFitRun').disabled = false;
+      finishFit();
       status('拟合 Worker 出错：' + (e.message || '未知'), 'err');
     };
     return ui.worker;
+  }
+  function fitOnMain(cfg, done) {
+    ui.workerDisabled = true;
+    status('拟合 Worker 不可用，改用主线程兼容模式。', 'err');
+    Core.fit(cfg, { isCancelled: function () { return ui.cancelFlag; } }).then(function (res) {
+      finishFit();
+      done(res);
+    }).catch(function (error) {
+      finishFit();
+      done({ ok: false, reason: error && error.message || String(error) });
+    });
   }
   function runFit(bgOnly) {
     var r = region(), s = sample();
@@ -50,10 +65,10 @@
       bg: { model: r.bg.model, coeffs: r.bg.coeffs, anchors: r.bg.anchors }, peaks: peaks, maxIter: 120
     };
     var w = ensureWorker(), id = ++ui.seq;
-    ui.running = true;
+    ui.running = true; ui.cancelFlag = false;
     $('btnFitCancel').hidden = false; $('btnFitRun').disabled = true;
     status(bgOnly ? '背景拟合中…' : '拟合中…');
-    ui.pending[id] = function (res) {
+    function done(res) {
       if (res.reason === 'cancelled') { status('已取消拟合。', 'ok'); renderResults(); return; }
       if (!res.ok) { status('拟合失败：' + res.reason, 'err'); renderResults(); return; }
       if (bgOnly) {
@@ -70,12 +85,16 @@
         status('拟合完成：' + res.params.length + ' 峰，Rwp=' + f(res.quality.rwp, 4), 'ok');
       }
       renderAllFit();
-    };
-    w.postMessage({ id: id, cfg: cfg });
+    }
+    if (!w) { fitOnMain(cfg, done); return; }
+    ui.pending[id] = done;
+    try { w.postMessage({ id: id, cfg: cfg }); }
+    catch (e) { delete ui.pending[id]; fitOnMain(cfg, done); }
   }
   function cancelFit() {
     if (!ui.running) return;
-    if (ui.worker) { ui.worker.postMessage({ cancel: true }); setTimeout(function () { if (ui.running && ui.worker) { ui.worker.terminate(); ui.worker = null; ui.running = false; ui.finishedAt = Date.now(); $('btnFitCancel').hidden = true; $('btnFitRun').disabled = false; status('已取消拟合。', 'ok'); } }, 1500); }
+    ui.cancelFlag = true;
+    if (ui.worker) { ui.worker.postMessage({ cancel: true }); setTimeout(function () { if (ui.running && ui.worker) { ui.worker.terminate(); ui.worker = null; finishFit(); status('已取消拟合。', 'ok'); } }, 1500); }
     status('取消中…');
   }
 

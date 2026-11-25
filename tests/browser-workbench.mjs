@@ -93,11 +93,12 @@ s = await ev(ws, `(async () => {
   const f = new File([text], 'BT86_xrd.txt', { type: 'text/plain' });
   Object.defineProperty($('fileInput'), 'files', { value: [f], configurable: true });
   $('fileInput').dispatchEvent(new Event('change', { bubbles: true }));
-  for (let i = 0; i < 60; i++) { await sleep(100); if (!$('impConfirm').disabled && $('impTable').querySelectorAll('tr').length > 1) break; }
-  const preview = { rows: $('impTable').querySelectorAll('tbody tr').length, summary: $('impSummary').textContent, errors: $('impErrors').hidden };
+  for (let i = 0; i < 100; i++) { await sleep(100); if ($('impStatus').dataset.state === 'ready') break; }
+  const preview = { rows: $('impTable').querySelectorAll('tbody tr').length, summary: $('impSummary').textContent, errors: $('impErrors').hidden, firstError: $('impErrorList').textContent.slice(0, 160), delim: $('impDelim').value, x: $('impX').value, y: $('impY').value };
   $('impConfirm').click(); await sleep(400);
   const items = [...$('sampleList').querySelectorAll('.sample-item')];
   const bt = items.find(x => x.textContent.includes('BT86'));
+  if (!bt) return { preview, n: CatApp.state.samples.length, name: null, status: $('impStatus').textContent, state: $('impStatus').dataset.state, fatal: $('impFatal').textContent };
   bt.click(); await sleep(300);
   const sel = CatApp.state.samples.find(x => x.id === CatApp.state.selectedId);
   return {

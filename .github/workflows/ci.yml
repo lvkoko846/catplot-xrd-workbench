@@ -61,6 +61,7 @@ jobs:
           node tests/browser-fit.mjs
           node tests/browser-public.mjs
           node tests/browser-batch.mjs
+          node tests/browser-workers.mjs
           node tests/browser-match.mjs
           node tests/browser-report.mjs
           node tests/browser-charge.mjs

@@ -71,9 +71,10 @@ r = await ev(ws, `(async () => { ${HELP}
   return { n: rs.length, okN: rs.filter(x=>x.ok).length, ms: Date.now()-t0,
     centers: rs.map(x=>x.ok?+x.params[0].c.toFixed(3):null),
     summaryRows: $('batchSummaryTable').querySelector('table').querySelectorAll('tbody tr').length,
-    status: $('batchStatus').textContent };
+    status: $('batchStatus').textContent, engine: $('batchStatus').dataset.engine };
 })()`);
 ok(r.n === 6 && r.okN === 6 && r.summaryRows === 6, 'BB3 批量运行 6 样品全成功，汇总表 6 行', r);
+ok(r.engine === 'worker', 'BB3c 批量拟合实际由 Worker 执行', r.engine);
 const cExp = [30, 30.15, 30.3, 30.45, 30.6, 30.75];
 ok(r.centers.every((c, i) => c != null && Math.abs(c - cExp[i]) < 0.05), 'BB3b 各样品峰位恢复线性偏移（误差<0.05°）', r.centers);
 

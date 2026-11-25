@@ -13,9 +13,9 @@ const payload = {
   title: 'TiO2 系列组会', generatedAt: '2026-11-19T00:00:00Z',
   mainSvg: '<svg viewBox="0 0 960 560"><path d="M0 0"/></svg>',
   trendSvg: '<svg viewBox="0 0 960 420"><path d="M0 0"/></svg>',
-  samples: [{ name: '样品<x>', source: 'file', points: 2501, normalize: false, offset: 0 }, { name: '模拟演示', source: 'sim', points: 501, normalize: true, offset: 5 }],
+  samples: [{ name: '样品<x>', source: 'file', points: 2501, workingPoints: 2499, format: 'ras', skippedRows: 2, warnings: ['因子列已换算', '非单调已排序'], normalize: false, offset: 0 }, { name: '模拟演示', source: 'sim', points: 501, normalize: true, offset: 5 }],
   fitRegions: [{ min: 24, max: 27, shape: 'pseudoVoigt', params: [{ c: 25.27, d: 3.52, w: 0.4, area: 400, sp: 0.5 }], quality: { rwp: 0.04 } }],
-  batchResults: [{ name: 'x=0', xValue: 0, ok: true, params: [{ c: 25.27, d: 3.52, w: 0.4, area: 400, D: 20, Dapparent: true }, { c: 27.4, d: 3.25, w: 0.3, area: 300, D: 27, Dapparent: true }], quality: { rwp: 0.04 } }, { name: '坏', xValue: 1, ok: false, reason: 'no-peaks: 区间无峰' }],
+  batchResults: [{ name: 'x=0', xValue: 0, ok: true, params: [{ c: 25.27, d: 3.52, w: 0.4, area: 400, D: 20, Dapparent: true }, { c: 27.4, d: 3.25, w: 0.3, area: 300, D: 27, Dapparent: true }], quality: { rwp: 0.04 } }, { name: '坏', xValue: 1, ok: false, reason: 'no-peaks: 区间无峰' }, { name: '取消', xValue: 2, ok: false, skipped: true, reason: 'cancelled: 批量已取消' }],
   match: { candidates: [{ name: '锐钛矿', score: 88, reliable: true, matched: 3, usableExp: 6, composition: { matchFrac: 0.5, devScore: 0.9 } }], phases: [{ name: '锐钛矿', score: 88, coveredT: [25.3], reliable: true }], coverage: '已解释 3 · 剩余 3' },
   provenance: [{ name: 'XRED', license: 'MIT', source: 'github', url: 'https://github.com/WPEM/XRED', note: '实验谱' }]
 };
@@ -31,6 +31,8 @@ ok(html.includes('样品&lt;x&gt;') && !html.includes('样品<x>'), 'R7 HTML转�
 ok(html.includes('no-peaks: 区间无峰'), 'R8 失败样品原因入报告');
 ok(html.includes('<svg') && html.includes('M0 0'), 'R9 内嵌对比/趋势SVG');
 ok(html.includes('每样品全部特征峰（2 行）') && html.includes('27.4'), 'R10 多峰样品全峰表不截断', html.includes('每样品全部特征峰'));
+ok(html.includes('导入质量与警告') && html.includes('2501 / 2499') && html.includes('因子列已换算'), 'R11 报告含导入格式、原始/分析点与警告');
+ok(html.includes('成功 1 · 失败 1 · 取消/跳过 1') && html.includes('取消/跳过'), 'R12 批量结果区分成功、失败与取消');
 
 console.log('== 组会报告真值汇总 == 通过 ' + pass + ' / ' + (pass + fail));
 process.exit(fail ? 1 : 0);

@@ -1925,7 +1925,10 @@
   });
 
   /* ---------- 导入对话框 ---------- */
-  var imp = { queue: [], index: 0, text: '', buffer: null, fileName: '', format: 'table', result: null, ackSig: null };
+  var imp = {
+    queue: [], index: 0, text: '', buffer: null, fileName: '', format: 'auto', result: null, ackSig: null,
+    generation: 0, seq: 0, worker: null, reader: null, parseTimer: null, workerDisabled: false
+  };
 
   function delimValue() {
     var v = $('impDelim').value;
@@ -1942,42 +1945,216 @@
       sortMode: document.querySelector('input[name="sortMode"]:checked').value
     };
   }
+  function importPayload() {
+    return imp.format === 'spa' || imp.buffer ? imp.buffer : imp.text;
+  }
+  function importCurrent(generation) {
+    return generation === imp.generation && !$('importModal').hidden;
+  }
+  function setImportStatus(message, state, engine) {
+    var el = $('impStatus');
+    el.textContent = message || '';
+    el.dataset.state = state || 'idle';
+    if (engine) el.dataset.engine = engine;
+    else delete el.dataset.engine;
+  }
+  function stopImportParser() {
+    if (imp.worker) {
+      var worker = imp.worker;
+      imp.worker = null;
+      worker.onmessage = null;
+      worker.onerror = null;
+      worker.terminate();
+    }
+  }
+  function cancelImportWork() {
+    clearTimeout(imp.parseTimer);
+    imp.parseTimer = null;
+    stopImportParser();
+    if (imp.reader) {
+      var reader = imp.reader;
+      imp.reader = null;
+      try { reader.cancel(); } catch (e) {}
+    }
+  }
+  function resetImportPreview() {
+    imp.result = null;
+    imp.ackSig = null;
+    $('impAck').checked = false;
+    $('impConfirm').disabled = true;
+    $('impConfirm').textContent = '导入';
+    $('impTable').innerHTML = '';
+    $('impSummary').textContent = '';
+    ['impNativeMeta', 'impWarnings', 'impQuality', 'qDup', 'qSort', 'impErrors', 'impFatal'].forEach(function (id) { $(id).hidden = true; });
+    ['impNativeMeta', 'impWarnings', 'impFatal'].forEach(function (id) { $(id).innerHTML = ''; });
+    $('impErrorList').innerHTML = '';
+    ['impDelim', 'impSkip', 'impX', 'impY'].forEach(function (id) { $(id).disabled = true; });
+  }
+
+  function readImportFile(file, generation, onProgress) {
+    function direct() {
+      if (/\.spa$/i.test(file.name)) return file.arrayBuffer().then(function (buffer) { return { name: file.name, size: file.size, buffer: buffer }; });
+      return file.text().then(function (text) { return { name: file.name, size: file.size, text: text }; });
+    }
+    if (!file.stream) return direct();
+    return new Promise(function (resolve, reject) {
+      var reader;
+      try { reader = file.stream().getReader(); } catch (e) { direct().then(resolve, reject); return; }
+      imp.reader = reader;
+      var binary = /\.spa$/i.test(file.name);
+      var decoder = binary ? null : new TextDecoder('utf-8');
+      var chunks = [], loaded = 0;
+      function fail(error) {
+        if (imp.reader === reader) imp.reader = null;
+        reject(error);
+      }
+      function pump() {
+        reader.read().then(function (part) {
+          if (!importCurrent(generation)) { fail(new Error('cancelled')); return; }
+          if (part.done) {
+            if (imp.reader === reader) imp.reader = null;
+            if (binary) {
+              var bytes = new Uint8Array(loaded), offset = 0;
+              chunks.forEach(function (chunk) { bytes.set(chunk, offset); offset += chunk.byteLength; });
+              resolve({ name: file.name, size: file.size, buffer: bytes.buffer });
+            } else {
+              chunks.push(decoder.decode());
+              resolve({ name: file.name, size: file.size, text: chunks.join('') });
+            }
+            return;
+          }
+          loaded += part.value.byteLength;
+          if (onProgress) onProgress(file.size ? loaded / file.size : 0);
+          chunks.push(binary ? part.value : decoder.decode(part.value, { stream: true }));
+          pump();
+        }).catch(fail);
+      }
+      pump();
+    });
+  }
+
+  function parseImportOnMain(data, fileName, format, opts, initial, generation) {
+    return new Promise(function (resolve) {
+      setTimeout(function () {
+        if (!importCurrent(generation)) { resolve(null); return; }
+        try {
+          var detected = !format || format === 'auto' ? window.CatParser.detectFormat(data, fileName) : format;
+          var useOpts = Object.assign({
+            delimiter: 'auto', skipRows: 0, xCol: 0, yCol: 1,
+            duplicateMode: 'keep', sortMode: 'sort'
+          }, opts || {});
+          if (detected === 'table' && initial) useOpts.skipRows = window.CatParser.suggestSkip(data, useOpts.delimiter, useOpts.xCol, useOpts.yCol);
+          var result = detected === 'table'
+            ? window.CatParser.analyze(data, useOpts)
+            : window.CatParser.analyzeNative(data, detected, useOpts);
+          resolve({ result: result, meta: { format: detected, delimiter: result.delimiter, skipRows: result.skippedHeader }, engine: 'main' });
+        } catch (error) {
+          resolve({ error: error && error.message || String(error), engine: 'main' });
+        }
+      }, 0);
+    });
+  }
+
+  function parseImportData(data, fileName, format, opts, initial, generation) {
+    if (imp.workerDisabled || typeof Worker === 'undefined') {
+      imp.workerDisabled = true;
+      return parseImportOnMain(data, fileName, format, opts, initial, generation);
+    }
+    return new Promise(function (resolve) {
+      var worker;
+      try { worker = new Worker('js/parserworker.js'); } catch (e) {
+        imp.workerDisabled = true;
+        resolve(parseImportOnMain(data, fileName, format, opts, initial, generation));
+        return;
+      }
+      imp.worker = worker;
+      var id = ++imp.seq;
+      function finish() {
+        worker.onmessage = null;
+        worker.onerror = null;
+        worker.terminate();
+        if (imp.worker === worker) imp.worker = null;
+      }
+      function fallback() {
+        finish();
+        if (!importCurrent(generation)) { resolve(null); return; }
+        imp.workerDisabled = true;
+        resolve(parseImportOnMain(data, fileName, format, opts, initial, generation));
+      }
+      worker.onmessage = function (event) {
+        var message = event.data || {};
+        if (message.id !== id) return;
+        finish();
+        if (!importCurrent(generation)) { resolve(null); return; }
+        if (!message.ok) { fallback(); return; }
+        if (message.meta && message.meta.requiresMain) {
+          resolve(parseImportOnMain(data, fileName, format, opts, initial, generation));
+          return;
+        }
+        resolve({ result: message.result, meta: message.meta, engine: 'worker' });
+      };
+      worker.onerror = function () { fallback(); };
+      try {
+        worker.postMessage({ id: id, data: data, fileName: fileName, format: format, opts: opts, initial: !!initial });
+      } catch (e) { fallback(); }
+    });
+  }
 
   function openImportQueue(files) {
+    cancelImportWork();
     imp.queue = files;
     imp.index = 0;
+    imp.generation++;
     openImportCurrent();
-  }
-  function importPayload() {
-    return imp.format === 'spa' ? imp.buffer : imp.text;
   }
 
   function openImportCurrent() {
+    cancelImportWork();
+    var generation = ++imp.generation;
     var f = imp.queue[imp.index];
-    imp.text = f.text || '';
-    imp.buffer = f.buffer || null;
+    imp.text = '';
+    imp.buffer = null;
     imp.fileName = f.name;
-    imp.format = window.CatParser.detectFormat(f.buffer || imp.text, f.name);
-    imp.ackSig = null;
+    imp.format = 'auto';
+    resetImportPreview();
     $('impFileMeta').textContent = f.name + ' · ' + (f.size / 1024).toFixed(1) + ' KB' +
       (imp.queue.length > 1 ? ' · 文件 ' + (imp.index + 1) + ' / ' + imp.queue.length : '');
     $('impQueue').textContent = imp.queue.length > 1 ? '多文件导入：' + (imp.index + 1) + ' / ' + imp.queue.length : '';
     $('impName').value = f.name.replace(/\.[^.]+$/, '');
-    var native = imp.format !== 'table';
-    ['impDelim', 'impSkip', 'impX', 'impY'].forEach(function (id) { $(id).disabled = native; });
-    ['impDelimField', 'impSkipField', 'impXField', 'impYField'].forEach(function (id) { $(id).hidden = native; });
+    ['impDelimField', 'impSkipField', 'impXField', 'impYField'].forEach(function (id) { $(id).hidden = false; });
     $('impDelim').value = 'auto';
-    var d = native ? 'auto' : window.CatParser.detectDelimiter(imp.text);
-    $('impSkip').value = native ? 0 : window.CatParser.suggestSkip(imp.text, d, 0, 1);
+    $('impSkip').value = '0';
     document.querySelector('input[name="dupMode"][value="keep"]').checked = true;
     document.querySelector('input[name="sortMode"][value="sort"]').checked = true;
-    $('impAck').checked = false;
     $('importModal').hidden = false;
-    updateImportPreview(true);
+    setImportStatus('正在读取文件…', 'reading');
+    readImportFile(f, generation, function (ratio) {
+      if (!importCurrent(generation)) return;
+      setImportStatus('正在读取文件… ' + Math.round(ratio * 100) + '%', 'reading');
+    }).then(function (loaded) {
+      if (!importCurrent(generation)) return null;
+      imp.text = loaded.text || '';
+      imp.buffer = loaded.buffer || null;
+      return requestImportParse({
+        delimiter: 'auto', skipRows: 0, xCol: 0, yCol: 1,
+        duplicateMode: 'keep', sortMode: 'sort'
+      }, true, generation, true);
+    }).catch(function (error) {
+      if (!importCurrent(generation)) return;
+      imp.result = null;
+      $('impConfirm').disabled = true;
+      $('impFatal').hidden = false;
+      $('impFatal').textContent = '文件读取失败：' + (error && error.message || error);
+      setImportStatus('读取失败，可取消后重试。', 'error');
+    });
   }
+
   function closeImport() {
+    imp.generation++;
+    cancelImportWork();
     $('importModal').hidden = true;
-    imp.queue = []; imp.index = 0; imp.text = ''; imp.buffer = null; imp.format = 'table'; imp.result = null; imp.ackSig = null;
+    imp.queue = []; imp.index = 0; imp.text = ''; imp.buffer = null; imp.format = 'auto'; imp.result = null; imp.ackSig = null;
+    setImportStatus('', 'idle');
   }
 
   function fillColumnSelects(maxCols, keep) {
@@ -1999,19 +2176,68 @@
     }
   }
 
+  function refreshImportAvailability() {
+    var r = imp.result;
+    var canImport = $('impStatus').dataset.state === 'ready' && !!r && !r.fatal && r.points.length > 0 && (!r.errors.length || $('impAck').checked);
+    $('impConfirm').disabled = !canImport;
+    $('impConfirm').textContent = r && r.points.length ? '导入 ' + r.points.length + ' 个数据点' : '导入';
+  }
+
+  function requestImportParse(opts, rebuildCols, generation, initial) {
+    clearTimeout(imp.parseTimer);
+    imp.parseTimer = null;
+    stopImportParser();
+    var payload = importPayload();
+    if (payload == null) return Promise.resolve(null);
+    setImportStatus(initial ? '正在解析预览…' : '正在更新预览…', 'parsing', imp.workerDisabled ? 'main' : 'worker');
+    return parseImportData(payload, imp.fileName, imp.format, opts, initial, generation).then(function (out) {
+      if (!out || !importCurrent(generation)) return null;
+      if (out.error) {
+        imp.result = null;
+        $('impFatal').hidden = false;
+        $('impFatal').textContent = '预览解析失败：' + out.error;
+        setImportStatus('解析失败，可取消后重试。', 'error', out.engine);
+        return null;
+      }
+      var r = out.result, meta = out.meta;
+      imp.format = meta.format;
+      var native = imp.format !== 'table';
+      ['impDelim', 'impSkip', 'impX', 'impY'].forEach(function (id) { $(id).disabled = native; });
+      ['impDelimField', 'impSkipField', 'impXField', 'impYField'].forEach(function (id) { $(id).hidden = native; });
+      if (initial && !native) {
+        $('impDelim').value = meta.delimiter === '\t' ? '\\t' : meta.delimiter;
+        $('impSkip').value = String(meta.skipRows);
+        opts = impOpts();
+      }
+      var columnsChanged = false;
+      if (!native && (rebuildCols || $('impX').options.length !== Math.max(1, r.maxCols))) {
+        var prevX = opts.xCol, prevY = opts.yCol;
+        fillColumnSelects(Math.max(1, r.maxCols), !rebuildCols);
+        opts = impOpts();
+        columnsChanged = opts.xCol !== prevX || opts.yCol !== prevY;
+      }
+      if (columnsChanged) return requestImportParse(opts, false, generation, false);
+      renderImportResult(r, opts);
+      var engineNote = out.engine === 'worker' ? '后台 Worker，界面保持响应' : (imp.format === 'xrdml' ? 'XRDML 主线程兼容模式' : '主线程兼容模式');
+      setImportStatus('预览已更新 · ' + engineNote, 'ready', out.engine);
+      refreshImportAvailability();
+      return r;
+    });
+  }
+
   function updateImportPreview(rebuildCols) {
-    var opts = impOpts();
-    var parse = imp.format === 'table' ? window.CatParser.analyze : window.CatParser.analyzeNative;
-    var r = imp.format === 'table' ? parse(imp.text, opts) : parse(importPayload(), imp.format, opts);
+    if ($('importModal').hidden || importPayload() == null) return;
+    var generation = imp.generation;
+    $('impConfirm').disabled = true;
+    setImportStatus('设置已更改，正在更新预览…', 'parsing', imp.workerDisabled ? 'main' : 'worker');
+    clearTimeout(imp.parseTimer);
+    imp.parseTimer = setTimeout(function () {
+      if (importCurrent(generation)) requestImportParse(impOpts(), !!rebuildCols, generation, false);
+    }, 120);
+  }
+
+  function renderImportResult(r, opts) {
     imp.result = r;
-
-    if (imp.format === 'table' && (rebuildCols || $('impX').options.length !== Math.max(1, r.maxCols))) {
-      fillColumnSelects(Math.max(1, r.maxCols), !rebuildCols);
-      opts = impOpts();
-      r = window.CatParser.analyze(imp.text, opts);
-      imp.result = r;
-    }
-
     var xCol = opts.xCol, yCol = opts.yCol;
     var recordTrace = imp.format !== 'table' && r.native && r.native.trace === 'record';
     var nativeBox = $('impNativeMeta');
@@ -2072,7 +2298,6 @@
     if (opts.duplicateMode === 'merge' && r.merged.length) html += ' · 合并重复 X ' + r.merged.length + ' 组';
     sum.innerHTML = html;
 
-    /* 数据检查块：重复 X / 非单调，显式选项 */
     var q = r.quality;
     $('qDup').hidden = !(q.duplicateExtra > 0);
     if (q.duplicateExtra > 0) {
@@ -2108,15 +2333,11 @@
     var fatal = $('impFatal');
     if (r.fatal) { fatal.hidden = false; fatal.textContent = r.fatal; }
     else fatal.hidden = true;
-
-    var canImport = !r.fatal && r.points.length > 0 && (!r.errors.length || $('impAck').checked);
-    $('impConfirm').disabled = !canImport;
-    $('impConfirm').textContent = r.points.length ? '导入 ' + r.points.length + ' 个数据点' : '导入';
+    refreshImportAvailability();
   }
 
   ['impDelim', 'impSkip', 'impX', 'impY'].forEach(function (id) {
     $(id).addEventListener('input', function () { updateImportPreview(false); });
-    $(id).addEventListener('change', function () { updateImportPreview(false); });
   });
   document.querySelectorAll('input[name="dupMode"], input[name="sortMode"]').forEach(function (el) {
     el.addEventListener('change', function () { updateImportPreview(false); });
@@ -2124,7 +2345,7 @@
   $('impAck').addEventListener('change', function () {
     if (this.checked && imp.result) imp.ackSig = M.errorSignature(imp.result.errors);
     else imp.ackSig = null;
-    updateImportPreview(false);
+    refreshImportAvailability();
   });
   $('impCancel').addEventListener('click', closeImport);
   $('impClose').addEventListener('click', closeImport);
@@ -2137,7 +2358,9 @@
 
   $('impConfirm').addEventListener('click', function () {
     var r = imp.result;
-    if (!r || !r.points.length) return;
+    if ($('impStatus').dataset.state !== 'ready' || !r || !r.points.length || (r.errors.length && !$('impAck').checked)) return;
+    $('impConfirm').disabled = true;
+    setImportStatus('正在导入「' + imp.fileName + '」…', 'parsing');
     var opts = impOpts();
     var name = $('impName').value.trim() || imp.fileName.replace(/\.[^.]+$/, '');
     checkpoint('导入「' + name + '」');
@@ -2199,14 +2422,7 @@
     });
     if (rejected.length) toast('以下文件未读取：' + rejected.join('；'), 'err');
     if (!ok.length) return;
-    Promise.all(ok.map(function (f) {
-      if (/\.spa$/i.test(f.name)) return f.arrayBuffer().then(function (buffer) { return { name: f.name, size: f.size, buffer: buffer }; });
-      return f.text().then(function (text) { return { name: f.name, size: f.size, text: text }; });
-    })).then(function (loaded) {
-      openImportQueue(loaded);
-    }).catch(function (e) {
-      toast('文件读取失败：' + e.message, 'err');
-    });
+    openImportQueue(ok);
   }
 
   $('fileInput').addEventListener('change', function () {

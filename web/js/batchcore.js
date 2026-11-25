@@ -84,7 +84,7 @@
       lastReason = res.reason;
       if (res.reason === 'cancelled' || /^no-|^bad-init|^underdetermined|^no-free/.test(res.reason)) break;
     }
-    if (!res.ok) return { ok: false, reason: lastReason || res.reason, iterations: res.iterations };
+    if (!res.ok) return { ok: false, reason: res.reason === 'cancelled' ? 'cancelled' : (lastReason || res.reason), iterations: res.iterations };
     /* d 值/Scherrer 为 XRD 专属（settings.xrd!==false）；其他表征仅通用峰参数 */
     var isXrd = settings.xrd !== false;
     var lambda = settings.lambda != null ? settings.lambda : 1.5406;

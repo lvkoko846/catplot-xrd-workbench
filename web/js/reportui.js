@@ -10,7 +10,10 @@
     var samples = st.samples.map(function (s) {
       var ch = (s.charge && s.charge.applied && isFinite(s.charge.shift)) ? s.charge : null;
       var meta = s.importMeta || {};
-      return { name: s.name, source: s.source, points: s.raw && s.raw.x ? s.raw.x.length : 0, normalize: !!s.normalize, offset: s.offset || 0,
+      return { name: s.name, source: s.source, points: s.raw && s.raw.x ? s.raw.x.length : 0,
+        workingPoints: s.working && s.working.x ? s.working.x.length : 0,
+        format: meta.format || 'table', skippedRows: Array.isArray(meta.skippedRows) ? meta.skippedRows.length : 0,
+        warnings: Array.isArray(meta.warnings) ? meta.warnings : [], normalize: !!s.normalize, offset: s.offset || 0,
         license: meta.license || '', sourceUrl: meta.sourceUrl || '', citation: meta.citation || '',
         charge: ch ? { shift: ch.shift, refLabel: ch.refLabel || '', refMeasured: ch.refMeasured, refTarget: ch.refTarget } : null };
     });

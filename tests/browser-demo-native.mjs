@@ -104,7 +104,7 @@ try {
   await upload(ws, join(ROOT, 'tests/fixtures/real/MiniDIFDUP.JDX'));
   result = await ev(ws, `(async () => { ${HELP}
     const deadline = Date.now() + 10000;
-    while ($('importModal').hidden && Date.now() < deadline) await sleep(100);
+    while ($('impStatus').dataset.state !== 'ready' && $('impStatus').dataset.state !== 'error' && Date.now() < deadline) await sleep(100);
     const meta = $('impNativeMeta').textContent;
     const warnings = $('impWarnings').textContent;
     const physical = $('impTable').querySelector('tbody tr td').textContent;
@@ -124,7 +124,7 @@ try {
   await upload(ws, join(ROOT, 'tests/fixtures/real/BT86_.UXD'));
   result = await ev(ws, `(async () => { ${HELP}
     const deadline = Date.now() + 10000;
-    while ($('importModal').hidden && Date.now() < deadline) await sleep(100);
+    while ($('impStatus').dataset.state !== 'ready' && $('impStatus').dataset.state !== 'error' && Date.now() < deadline) await sleep(100);
     const meta = $('impNativeMeta').textContent;
     $('impConfirm').click(); await sleep(500);
     const sample = CatApp.state.samples[CatApp.state.samples.length - 1];
@@ -138,7 +138,7 @@ try {
     Object.defineProperty($('fileInput'), 'files', { value: [file], configurable: true });
     $('fileInput').dispatchEvent(new Event('change', { bubbles: true }));
     const deadline = Date.now() + 10000;
-    while ($('importModal').hidden && Date.now() < deadline) await sleep(100);
+    while ($('impStatus').dataset.state !== 'ready' && $('impStatus').dataset.state !== 'error' && Date.now() < deadline) await sleep(100);
     const before = { disabled: $('impConfirm').disabled, errors: $('impErrorList').textContent, summary: $('impSummary').textContent };
     $('impAck').click(); await sleep(150);
     const afterAck = !$('impConfirm').disabled;
@@ -155,7 +155,7 @@ try {
     Object.defineProperty($('fileInput'), 'files', { value: [file], configurable: true });
     $('fileInput').dispatchEvent(new Event('change', { bubbles: true }));
     const deadline = Date.now() + 10000;
-    while ($('importModal').hidden && Date.now() < deadline) await sleep(100);
+    while ($('impStatus').dataset.state !== 'ready' && $('impStatus').dataset.state !== 'error' && Date.now() < deadline) await sleep(100);
     return { count: CatApp.state.samples.length, added: CatApp.state.samples.length - count, fatalHidden: $('impFatal').hidden, fatal: $('impFatal').textContent, disabled: $('impConfirm').disabled };
   })()`);
   ok(result.added === 0 && !result.fatalHidden && result.fatal.includes('无法识别') && result.disabled, 'DN10 损坏 JCAMP 明确失败，不产生部分谱', result);
@@ -166,8 +166,9 @@ try {
     Object.defineProperty($('fileInput'), 'files', { value: [file], configurable: true });
     $('fileInput').dispatchEvent(new Event('change', { bubbles: true }));
     const deadline = Date.now() + 10000;
-    while ($('importModal').hidden && Date.now() < deadline) await sleep(100);
-    const before = { meta: $('impNativeMeta').textContent, summary: $('impSummary').textContent, header: $('impTable').querySelector('thead th').textContent, firstRecord: $('impTable').querySelector('tbody tr td').textContent };
+    while ($('impStatus').dataset.state !== 'ready' && $('impStatus').dataset.state !== 'error' && Date.now() < deadline) await sleep(100);
+    const head = $('impTable').querySelector('thead th'), first = $('impTable').querySelector('tbody tr td');
+    const before = { meta: $('impNativeMeta').textContent, summary: $('impSummary').textContent, header: head ? head.textContent : '', firstRecord: first ? first.textContent : '', state: $('impStatus').dataset.state, status: $('impStatus').textContent, fatal: $('impFatal').textContent };
     $('impConfirm').click(); await sleep(450);
     const sample = CatApp.state.samples[CatApp.state.samples.length - 1];
     const validation = CatModel.validateProject(JSON.parse(JSON.stringify(CatModel.serializeProject(CatApp.state))));
@@ -182,7 +183,7 @@ try {
     Object.defineProperty($('fileInput'), 'files', { value: [file], configurable: true });
     $('fileInput').dispatchEvent(new Event('change', { bubbles: true }));
     const deadline = Date.now() + 10000;
-    while ($('importModal').hidden && Date.now() < deadline) await sleep(100);
+    while ($('impStatus').dataset.state !== 'ready' && $('impStatus').dataset.state !== 'error' && Date.now() < deadline) await sleep(100);
     const direct = CatParser.analyzeNative(${JSON.stringify(XRDML_RANGE)}, 'xrdml', { duplicateMode: 'keep', sortMode: 'sort' });
     const before = { warnings: $('impWarnings').textContent, fatal: $('impFatal').textContent, summary: $('impSummary').textContent, file: $('impFileMeta').textContent, hidden: $('importModal').hidden, disabled: $('impConfirm').disabled };
     $('impConfirm').click(); await sleep(400);
@@ -205,7 +206,7 @@ try {
       Object.defineProperty($('fileInput'), 'files', { value: [file], configurable: true });
       $('fileInput').dispatchEvent(new Event('change', { bubbles: true }));
       const deadline = Date.now() + 10000;
-      while ($('importModal').hidden && Date.now() < deadline) await sleep(50);
+      while ($('impStatus').dataset.state !== 'ready' && $('impStatus').dataset.state !== 'error' && Date.now() < deadline) await sleep(50);
       outcomes.push({ name, fatal: $('impFatal').textContent, meta: $('impNativeMeta').textContent, disabled: $('impConfirm').disabled, added: CatApp.state.samples.length - count });
       $('impCancel').click();
     }
@@ -218,7 +219,7 @@ try {
     Object.defineProperty($('fileInput'), 'files', { value: [file], configurable: true });
     $('fileInput').dispatchEvent(new Event('change', { bubbles: true }));
     const deadline = Date.now() + 10000;
-    while ($('importModal').hidden && Date.now() < deadline) await sleep(100);
+    while ($('impStatus').dataset.state !== 'ready' && $('impStatus').dataset.state !== 'error' && Date.now() < deadline) await sleep(100);
     const before = { meta: $('impNativeMeta').textContent, summary: $('impSummary').textContent, header: $('impTable').querySelector('thead th').textContent, errors: $('impErrorList').textContent, disabled: $('impConfirm').disabled };
     $('impAck').click(); await sleep(120);
     const afterAck = !$('impConfirm').disabled;
@@ -238,7 +239,7 @@ try {
     Object.defineProperty($('fileInput'), 'files', { value: [file], configurable: true });
     $('fileInput').dispatchEvent(new Event('change', { bubbles: true }));
     const deadline = Date.now() + 10000;
-    while ($('importModal').hidden && Date.now() < deadline) await sleep(100);
+    while ($('impStatus').dataset.state !== 'ready' && $('impStatus').dataset.state !== 'error' && Date.now() < deadline) await sleep(100);
     const before = { meta: $('impNativeMeta').textContent, summary: $('impSummary').textContent, header: $('impTable').querySelector('thead th').textContent, hidden: $('importModal').hidden, fatal: $('impFatal').textContent };
     $('impConfirm').click(); await sleep(450);
     const sample = CatApp.state.samples[CatApp.state.samples.length - 1];
@@ -256,7 +257,7 @@ try {
     Object.defineProperty($('fileInput'), 'files', { value: [file], configurable: true });
     $('fileInput').dispatchEvent(new Event('change', { bubbles: true }));
     const deadline = Date.now() + 10000;
-    while ($('importModal').hidden && Date.now() < deadline) await sleep(100);
+    while ($('impStatus').dataset.state !== 'ready' && $('impStatus').dataset.state !== 'error' && Date.now() < deadline) await sleep(100);
     return { count: CatApp.state.samples.length, fatal: $('impFatal').textContent, meta: $('impNativeMeta').textContent, disabled: $('impConfirm').disabled, hidden: $('importModal').hidden };
   })()`);
   ok(result.fatal.includes('干涉图') && result.disabled && !/NaN|undefined/.test(result.meta), 'DN22 SPA 独立干涉图明确拒绝，不伪装为光谱', result);

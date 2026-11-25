@@ -377,6 +377,15 @@ input[type="color"] {
 }
 .imp-summary .ok { color: var(--ok); font-weight: 600; }
 .imp-summary .warn { color: var(--amber); font-weight: 600; }
+.imp-status {
+  font-size: calc(12.5px * var(--site-type)); line-height: 1.6;
+  color: var(--site-accent); background: var(--accent-soft);
+  border: 1px solid var(--site-border); border-radius: calc(var(--site-radius) * 0.8);
+  padding: calc(8px * var(--site-space)) calc(11px * var(--site-space));
+}
+.imp-status:empty { display: none; }
+.imp-status[data-state="error"] { color: var(--danger); background: var(--danger-soft); border-color: var(--danger-line); }
+.imp-status[data-state="ready"] { color: var(--site-muted); background: var(--site-inset); }
 .imp-errors {
   border: 1px solid var(--danger-line);
   background: var(--danger-soft);
