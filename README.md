@@ -1,13 +1,18 @@
 # CatPlot · 多表征分析工作台（公开版）
 
+[![CI](https://github.com/lvkoko846/catplot-xrd-workbench/actions/workflows/ci.yml/badge.svg)](https://github.com/lvkoko846/catplot-xrd-workbench/actions/workflows/ci.yml)
+
 浏览器本地的 XRD / 拉曼 / 红外 / XPS 数值数据分析与绘图工作台：**上传 → 背景扣除 → 寻峰 → 峰拟合 → 出版级导出**。
-纯静态、零依赖、零外网调用、无数据库；内置**公开许可示例卡**与**5 份四表征真实公开实验谱**，也可导入 JCAMP-DX 与 Bruker UXD。
+纯静态、零依赖、零外网调用、无数据库；内置**公开许可示例卡**与**5 份四表征真实公开实验谱**，也可导入 JCAMP-DX、Bruker UXD、PANalytical XRDML、Rigaku RAS 与经严格校验的 OMNIC/OPUS SPA 单谱。
 
 > 本版为可公开部署/公开仓库版本。含受限许可数据的个人研究完整版另存他处，不随本仓库分发。
 
 ## 功能
-- 上传 CSV/TXT/TSV/DAT、**JCAMP-DX（.jdx/.jcamp/.dx）与 Bruker UXD**（浏览器本地解析，原始数据不上传、不覆盖）；导入预览/逐行追溯/错误定位。
+- 上传 CSV/TXT/TSV/DAT、**JCAMP-DX、Bruker UXD、PANalytical XRDML、Rigaku RAS、OMNIC/OPUS SPA**（浏览器本地解析，原始数据不上传、不覆盖）；导入预览/逐行或逐记录追溯/错误定位。
 - **原生 JCAMP-DX**：XYDATA / XYPOINTS / PEAK TABLE，AFFN/PAC、SQZ、DIF、DUP、DIFDUP，XFACTOR/YFACTOR；FIRSTX/LASTX/NPOINTS 完整时优先重建规则 X，DELTAX/极值冲突明确告警；压缩行保留物理行号与逻辑点号。
+- **PANalytical XRDML**：支持有/无命名空间前缀、首个含数据扫描的 `listPositions` 或起止轴、显式强度及 `counts × beamAttenuationFactors` 解码；共同轴保留为元数据。XML/二进制结构仅用逻辑记录号，不伪造文本行号。
+- **Rigaku RAS**：解析标记区段与仪器元数据；两列文件取第 2 列显示强度，三列文件将第 3 列作为正计数因子并计算「测量强度 = 第 2 列 ÷ 第 3 列」，预览明确提示该策略；坏行保留原文件物理行号，须确认后才导入有效记录。
+- **OMNIC/OPUS SPA**：严格校验签名、键表、块边界、点数、有限值与单位，支持已验证的单谱 float32 载荷及 cm⁻¹/拉曼位移/nm/µm；载荷按 Last X→First X 定向解码。拒绝独立干涉图、库检索变体、未知单位/布局与截断文件。
 - **一键演示数据**：XRD / 拉曼 / 红外 / XPS 共 5 份真实公开实验谱（MIT / CC BY 4.0），附来源、引用、许可与推荐背景；模拟 XRD 单独标明程序生成。
 - **堆叠出版风格**（≥2 样品默认）：纵向瀑布错开、Intensity (a.u.) 无 Y 刻度、粗黑框、底部卡片棒图轨道；间距/缩放可调、可回退普通模式；随 PNG/SVG 导出。
 - **上传我的卡片对比**：支持 ICDD PDF 文本卡片（自动提取卡号/化学式/波长/峰表）与 CSV/TXT 峰表；**不做匹配分析**，直接按上传顺序画成图下方棒图轨道（纵向压缩堆叠），标「化学式 PDF#卡号」、可改名；坏行具体报错；随项目存档与导出。
@@ -30,7 +35,7 @@
 - 示例参考卡叠加：独立棒图轨道（共用 X 轴、排序/显隐）、波长确认换算、许可与图谱类型徽标、来源链接。
 - 公开真实演示：XRED（MIT）3 组真实双相 TiO2 系列，`node scripts/demo-series.mjs` 全功能取证。
 - 撤销/重做 + 处理历史；项目 v5 本机保存/导出/导入（v1–v4 旧档兼容）；PNG/SVG/三层 CSV 导出（出版级白底、脚注声明）。
-- 明确不做：全谱 Rietveld、物相定量、峰面积→质量分数、结构精修；得分/面积占比均非含量或存在概率。
+- 明确不做：全谱 Rietveld、物相定量、峰面积→质量分数、结构精修；得分/面积占比均非含量或存在概率。**RASX 为 ZIP 容器，暂不支持**；SPA 仅接收上述已验证单谱布局，不把干涉图或未知变体猜作光谱。
 
 ## 快速开始
 ```bash
@@ -40,15 +45,19 @@ python scripts/build-examples.py  # 可选：离线重生成示例卡（需 pyma
 ```
 逻辑与原生格式：`node tests/run-tests.mjs && node tests/native-formats.mjs && node tests/fit-model.mjs && node tests/batch-model.mjs && node tests/match-model.mjs && node tests/report-model.mjs`。
 浏览器验收（先启动 4173 预览；Chrome 路径可用 `CHROME_PATH` 覆盖）：
-`node tests/browser-workbench.mjs && node tests/browser-fit.mjs && node tests/browser-public.mjs && node tests/browser-batch.mjs && node tests/browser-match.mjs && node tests/browser-report.mjs && node tests/browser-charge.mjs && node tests/browser-stack-upload.mjs && node tests/browser-techniques.mjs && node tests/browser-demo-native.mjs && node scripts/mobile-check.mjs`。
+`node tests/browser-workbench.mjs && node tests/browser-fit.mjs && node tests/browser-public.mjs && node tests/browser-batch.mjs && node tests/browser-match.mjs && node tests/browser-report.mjs && node tests/browser-charge.mjs && node tests/browser-stack-upload.mjs && node tests/browser-techniques.mjs && node tests/browser-demo-native.mjs && node scripts/mobile-check.mjs && node tests/visual-regression.mjs`。
+视觉回归锁定桌面/移动布局、溢出、图表路径与标签；确属有意改版时才用 `VISUAL_UPDATE=1 node tests/visual-regression.mjs` 重生成基线，并审查 `tests/visual-baseline.json` 差异。
 真实系列演示：`node scripts/demo-series.mjs`（XRED MIT 3 样品，产出截图+组会报告）。
-发布门禁：`node scripts/audit-release.mjs`（同时检查演示包许可、来源、四表征覆盖与有限数值）。
+发布门禁：`node scripts/audit-release.mjs`（同时检查演示包许可、来源、四表征覆盖、有限数值与引用/Zenodo 元数据一致性）。
 
 ## 目录
 - `web/`：完整静态产物（index.html / css / js / data/example-cards.json + demo-spectra.json）
 - `scripts/`：预览、演示包生成、审计门禁、移动端检查、截图取证
 - `tests/`：单元/真值/浏览器端到端套件与公开 fixture（XRED MIT、Bruker UXD、MiniDIFDUP GPL-3 测试样本）
 - `docs/`：API（前端模块契约）、FITTING、DATA-SOURCE、VERIFICATION、DEPLOY
+
+## 引用与归档
+论文引用元数据见 [CITATION.cff](CITATION.cff)，GitHub 仓库页提供 “Cite this repository”。代码版本归档与 DOI 获取流程见 [docs/DEPLOY.md](docs/DEPLOY.md#zenodo-存档与-doi)。Zenodo DOI 尚未签发，不虚构 DOI；签发后应回填 README 与 CITATION.cff。
 
 ## 许可
 代码 MIT（LICENSE）。部署数据：COD CC0-1.0、XRED / Raman Noodles MIT、Zenodo 15180744 CC BY 4.0；再分发保留来源链接与引用文本。`tests/fixtures/real/MiniDIFDUP.JDX` 为 GPL-3 测试样本，仅用于本地回归，不随 `web/` 部署（见 docs/DATA-SOURCE.md）。

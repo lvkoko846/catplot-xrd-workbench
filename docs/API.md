@@ -3,6 +3,14 @@
 公开版为**纯静态前端**：无数据库、无服务端 API、无外网调用。参考数据为内置公开示例卡
 （`web/data/example-cards.json`，CC0 计算图谱 ×2 + MIT 实验峰表 ×1）。本文档描述浏览器内模块契约。
 
+## CatParser（js/parser.js）
+- `detectFormat(data, fileName)`：按二进制签名/文件内容优先识别 `table`、`jcamp`、`uxd`、`xrdml`、`ras`、`spa`；`.rasx` 不冒充为 RAS，返回表格路径后由上传层明确拒绝。
+- `parse(text, opts)`：仅解析表格；`analyzeNative(data, format, opts)` 解析原生格式，SPA 接受 `ArrayBuffer`/字节视图，其余接受文本。
+- 结果契约：`{delimiter:'native', totalRecords, dataRows, blankRows, skippedHeader, preview, rawPoints, points, errors, quality, merged, sortApplied, fatal, warnings, native}`；原生格式锁定 X/Y 为解码后的第 1/2 列。
+- `rawPoints` 保持文件/载荷顺序，`points` 是显式排序/合并后的工作副本；`native.trace='line'` 时 `sourceLine` 保留物理文本行号，`trace='record'` 时仅有逻辑 `lineNo`，不伪造物理行号。
+- `formatName(format)` / `isNativeFormat(format)`：供导入预览、峰表追溯列和导出标签统一使用。
+- 支持边界：XRDML 取首个含数据扫描并按 `scanAxis` 选择变化轴，共同轴只作元数据；RAS 三列使用「测量强度 = 第 2 列 ÷ 第 3 列正计数因子」；SPA 严格校验小端键表、float32 载荷、端点和单位，拒绝干涉图、库检索变体、未知布局与截断数据。
+
 ## CatCards（js/cards.js）
 - `STICK_PALETTE`：8 色轨道调色板。
 - `braggTwoTheta(d, lambda)`：d(Å)→2θ(°)；d<λ/2 返回 null。

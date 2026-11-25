@@ -3,6 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { XRDML_LIST, XRDML_RANGE, XRDML_COMMON_ONLY, XRDML_BAD_LENGTH, XRDML_BAD_XML, XRDML_ENTITY, RAS_TEXT, makeSPA } from './vendor-fixtures.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BASE = 'http://127.0.0.1:4173';
@@ -159,6 +160,106 @@ try {
   })()`);
   ok(result.added === 0 && !result.fatalHidden && result.fatal.includes('无法识别') && result.disabled, 'DN10 损坏 JCAMP 明确失败，不产生部分谱', result);
 
+  result = await ev(ws, `(async () => { ${HELP}
+    $('impCancel').click();
+    const file = new File([${JSON.stringify(XRDML_LIST)}], 'synthetic-list.xrdml', { type: 'application/xml' });
+    Object.defineProperty($('fileInput'), 'files', { value: [file], configurable: true });
+    $('fileInput').dispatchEvent(new Event('change', { bubbles: true }));
+    const deadline = Date.now() + 10000;
+    while ($('importModal').hidden && Date.now() < deadline) await sleep(100);
+    const before = { meta: $('impNativeMeta').textContent, summary: $('impSummary').textContent, header: $('impTable').querySelector('thead th').textContent, firstRecord: $('impTable').querySelector('tbody tr td').textContent };
+    $('impConfirm').click(); await sleep(450);
+    const sample = CatApp.state.samples[CatApp.state.samples.length - 1];
+    const validation = CatModel.validateProject(JSON.parse(JSON.stringify(CatModel.serializeProject(CatApp.state))));
+    return { before, format: sample.importMeta.format, x: sample.raw.x, y: sample.raw.y, lineNos: sample.raw.lineNos, sourceLines: sample.raw.sourceLineNos,
+      native: sample.importMeta.native, trace: $('smpTraceBody').textContent, valid: validation.ok, errors: validation.errors };
+  })()`);
+  ok(result.before.meta.includes('PANalytical XRDML') && result.before.meta.includes('Synthetic XRD list') && result.before.meta.includes('45 kV') && result.before.header === '记录序号' && result.before.firstRecord === '1' && result.before.summary.includes('逻辑记录'), 'DN14 XRDML 列表轴、扫描轴选择与元数据在预览可见', result);
+  ok(result.format === 'xrdml' && result.x.join(',') === '10,11,12,13' && result.y.join(',') === '20,80,60,40' && result.lineNos.join(',') === '1,2,3,4' && result.sourceLines === undefined && result.native.selectedAxis === '2Theta' && result.native.scanCount === 1 && result.native.attenuationApplied && result.native.commonPositions[0].value === 0.25 && result.trace.includes('不伪造物理文本行号') && result.valid, 'DN15 XRDML counts×衰减、commonPosition 与逻辑记录追溯完整通过', result);
+
+  result = await ev(ws, `(async () => { ${HELP}
+    const file = new File([${JSON.stringify(XRDML_RANGE)}], 'synthetic-range.xrdml', { type: 'application/xml' });
+    Object.defineProperty($('fileInput'), 'files', { value: [file], configurable: true });
+    $('fileInput').dispatchEvent(new Event('change', { bubbles: true }));
+    const deadline = Date.now() + 10000;
+    while ($('importModal').hidden && Date.now() < deadline) await sleep(100);
+    const direct = CatParser.analyzeNative(${JSON.stringify(XRDML_RANGE)}, 'xrdml', { duplicateMode: 'keep', sortMode: 'sort' });
+    const before = { warnings: $('impWarnings').textContent, fatal: $('impFatal').textContent, summary: $('impSummary').textContent, file: $('impFileMeta').textContent, hidden: $('importModal').hidden, disabled: $('impConfirm').disabled };
+    $('impConfirm').click(); await sleep(400);
+    const sample = CatApp.state.samples[CatApp.state.samples.length - 1];
+    return { before, direct: { fatal: direct.fatal, warnings: direct.warnings, points: direct.points }, warnings: $('impWarnings').textContent, x: sample.raw.x, y: sample.raw.y, axis: sample.importMeta.native.selectedAxis, mode: sample.importMeta.native.intensityMode };
+  })()`);
+  ok(result.warnings.includes('优先采用 intensities') && result.x.join(',') === '20,22,24' && result.y.join(',') === '5,6,7' && result.axis === 'Omega' && result.mode === 'intensities', 'DN16 XRDML 前缀命名空间、起止轴重建与 intensities 优先级通过', result);
+
+  result = await ev(ws, `(async () => { ${HELP}
+    const count = CatApp.state.samples.length;
+    const cases = [
+      ['only-common', ${JSON.stringify(XRDML_COMMON_ONLY)}, '变化轴'],
+      ['bad-length', ${JSON.stringify(XRDML_BAD_LENGTH)}, '长度不一致'],
+      ['bad-xml', ${JSON.stringify(XRDML_BAD_XML)}, '语法损坏'],
+      ['entity', ${JSON.stringify(XRDML_ENTITY)}, 'DOCTYPE/ENTITY']
+    ];
+    const outcomes = [];
+    for (const [name, text, expected] of cases) {
+      const file = new File([text], name + '.xrdml', { type: 'application/xml' });
+      Object.defineProperty($('fileInput'), 'files', { value: [file], configurable: true });
+      $('fileInput').dispatchEvent(new Event('change', { bubbles: true }));
+      const deadline = Date.now() + 10000;
+      while ($('importModal').hidden && Date.now() < deadline) await sleep(50);
+      outcomes.push({ name, fatal: $('impFatal').textContent, meta: $('impNativeMeta').textContent, disabled: $('impConfirm').disabled, added: CatApp.state.samples.length - count });
+      $('impCancel').click();
+    }
+    return outcomes;
+  })()`);
+  ok(result.length === 4 && result.every(item => item.disabled && item.fatal.length > 0 && item.added === 0 && !/NaN|undefined/.test(item.meta)), 'DN17 全 common、长度冲突、坏 XML 与实体声明均明确失败且不导入', result);
+
+  result = await ev(ws, `(async () => { ${HELP}
+    const file = new File([${JSON.stringify(RAS_TEXT)}], 'synthetic.ras', { type: 'text/plain' });
+    Object.defineProperty($('fileInput'), 'files', { value: [file], configurable: true });
+    $('fileInput').dispatchEvent(new Event('change', { bubbles: true }));
+    const deadline = Date.now() + 10000;
+    while ($('importModal').hidden && Date.now() < deadline) await sleep(100);
+    const before = { meta: $('impNativeMeta').textContent, summary: $('impSummary').textContent, header: $('impTable').querySelector('thead th').textContent, errors: $('impErrorList').textContent, disabled: $('impConfirm').disabled };
+    $('impAck').click(); await sleep(120);
+    const afterAck = !$('impConfirm').disabled;
+    $('impConfirm').click(); await sleep(450);
+    const sample = CatApp.state.samples[CatApp.state.samples.length - 1];
+    const validation = CatModel.validateProject(JSON.parse(JSON.stringify(CatModel.serializeProject(CatApp.state))));
+    return { before, afterAck, format: sample.importMeta.format, x: sample.raw.x, y: sample.raw.y, lineNos: sample.raw.lineNos, sourceLines: sample.raw.sourceLineNos, skipped: sample.importMeta.skippedRows.length, valid: validation.ok, errors: validation.errors };
+  })()`);
+  ok(result.before.meta.includes('Rigaku RAS') && result.before.meta.includes('第 2 列 ÷ 第 3 列') && result.before.header === '文件行号' && result.before.errors.includes('第 28 行') && result.before.disabled && result.afterAck, 'DN18 RAS Y 列策略、物理行错误定位与显式坏行确认通过', result);
+  ok(result.format === 'ras' && result.x.join(',') === '10,11,13' && result.y.join(',') === '50,30,80' && result.lineNos.join(',') === '1,2,5' && result.sourceLines.join(',') === '26,27,30' && result.skipped === 2 && result.valid, 'DN19 RAS 合法点、原始物理行映射与项目校验完整通过', result);
+
+  const spaTimestamp = Math.floor(Date.UTC(2020, 0, 2, 3, 4, 5) / 1000) + 2209075200;
+  const spaBase64 = Buffer.from(makeSPA({ firstX: 100, lastX: 400, values: [4, 3, 2, 1], timestamp: spaTimestamp, title: 'Browser SPA fixture' })).toString('base64');
+  result = await ev(ws, `(async () => { ${HELP}
+    const bytes = Uint8Array.from(atob('${spaBase64}'), c => c.charCodeAt(0));
+    const file = new File([bytes], 'synthetic.spa', { type: 'application/octet-stream' });
+    Object.defineProperty($('fileInput'), 'files', { value: [file], configurable: true });
+    $('fileInput').dispatchEvent(new Event('change', { bubbles: true }));
+    const deadline = Date.now() + 10000;
+    while ($('importModal').hidden && Date.now() < deadline) await sleep(100);
+    const before = { meta: $('impNativeMeta').textContent, summary: $('impSummary').textContent, header: $('impTable').querySelector('thead th').textContent, hidden: $('importModal').hidden, fatal: $('impFatal').textContent };
+    $('impConfirm').click(); await sleep(450);
+    const sample = CatApp.state.samples[CatApp.state.samples.length - 1];
+    const validation = CatModel.validateProject(JSON.parse(JSON.stringify(CatModel.serializeProject(CatApp.state))));
+    return { before, format: sample.importMeta.format, rawX: sample.raw.x, rawY: sample.raw.y, workX: sample.working.x, workY: sample.working.y,
+      sourceLines: sample.raw.sourceLineNos, sortApplied: sample.importMeta.sortApplied, native: sample.importMeta.native, valid: validation.ok, errors: validation.errors };
+  })()`);
+  ok(result.before.meta.includes('OMNIC/OPUS SPA') && result.before.meta.includes('Browser SPA fixture') && result.before.meta.includes('Absorbance') && result.before.header === '记录序号' && result.before.summary.includes('逻辑记录'), 'DN20 SPA 二进制上传、单位/标题元数据与记录序号预览通过', result);
+  ok(result.format === 'spa' && result.rawX.join(',') === '400,300,200,100' && result.rawY.join(',') === '4,3,2,1' && result.workX.join(',') === '100,200,300,400' && result.workY.join(',') === '1,2,3,4' && result.sourceLines === undefined && result.sortApplied === 'asc' && result.native.dateMeasured === '2020-01-02T03:04:05.000Z' && result.valid, 'DN21 SPA 载荷方向、raw 不变、独立升序副本与项目校验完整通过', result);
+
+  const ifgBase64 = Buffer.from(makeSPA({ xUnit: 0x02, yUnit: 0x16 })).toString('base64');
+  result = await ev(ws, `(async () => { ${HELP}
+    const bytes = Uint8Array.from(atob('${ifgBase64}'), c => c.charCodeAt(0));
+    const file = new File([bytes], 'interferogram.spa', { type: 'application/octet-stream' });
+    Object.defineProperty($('fileInput'), 'files', { value: [file], configurable: true });
+    $('fileInput').dispatchEvent(new Event('change', { bubbles: true }));
+    const deadline = Date.now() + 10000;
+    while ($('importModal').hidden && Date.now() < deadline) await sleep(100);
+    return { count: CatApp.state.samples.length, fatal: $('impFatal').textContent, meta: $('impNativeMeta').textContent, disabled: $('impConfirm').disabled, hidden: $('importModal').hidden };
+  })()`);
+  ok(result.fatal.includes('干涉图') && result.disabled && !/NaN|undefined/.test(result.meta), 'DN22 SPA 独立干涉图明确拒绝，不伪装为光谱', result);
   await ev(ws, `(() => { document.getElementById('impCancel').click(); return true; })()`);
   await send(ws, 'Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   result = await ev(ws, `(async () => { ${HELP}

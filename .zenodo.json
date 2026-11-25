@@ -1,0 +1,35 @@
+{
+  "title": "CatPlot: browser-local multi-technique spectroscopy analysis and plotting workbench",
+  "upload_type": "software",
+  "version": "0.1.0",
+  "publication_date": "2026-11-25",
+  "description": "CatPlot is a pure-static, browser-local workbench for XRD, Raman, FTIR and XPS data. It provides native JCAMP-DX and Bruker UXD import, background subtraction, peak detection, multi-model peak fitting, batch trends, reference-pattern tracks, project archives and publication-oriented PNG/SVG/CSV/HTML export. Raw data remain local and are not uploaded. The release includes public example spectra with provenance and license metadata, deterministic model tests, real-format acceptance fixtures, browser end-to-end tests and SVG/layout visual regression baselines.",
+  "creators": [
+    {
+      "name": "lvkoko846"
+    }
+  ],
+  "license": "mit",
+  "access_right": "open",
+  "language": "eng",
+  "keywords": [
+    "X-ray diffraction",
+    "Raman spectroscopy",
+    "XPS",
+    "FTIR",
+    "peak fitting",
+    "JCAMP-DX",
+    "Bruker UXD",
+    "visual regression"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/lvkoko846/catplot-xrd-workbench",
+      "relation": "isDerivedFrom"
+    },
+    {
+      "identifier": "https://catplot-xrd-ahzrkmiqf3h.qoder.website",
+      "relation": "isSupplementTo"
+    }
+  ]
+}

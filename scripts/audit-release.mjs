@@ -34,6 +34,32 @@ function walk(dir) {
 for (const d of SCAN_DIRS) if (existsSync(join(ROOT, d))) walk(join(ROOT, d));
 if (existsSync(join(ROOT, 'README.md'))) files.push({ abs: join(ROOT, 'README.md'), rel: 'README.md', size: statSync(join(ROOT, 'README.md')).size, readmeOnly: true });
 
+let citationVersion = null;
+const citationPath = join(ROOT, 'CITATION.cff');
+if (!existsSync(citationPath)) violations.push('CITATION.cff：缺少引用元数据');
+else {
+  const citation = readFileSync(citationPath, 'utf8');
+  for (const field of ['cff-version', 'title', 'type: software', 'repository-code', 'license: MIT', 'version']) {
+    if (!citation.includes(field)) violations.push('CITATION.cff：缺少 ' + field);
+  }
+  citationVersion = citation.match(/^version:\s*["']?([^"'\s]+)/m)?.[1] || null;
+}
+
+const zenodoPath = join(ROOT, '.zenodo.json');
+if (!existsSync(zenodoPath)) violations.push('.zenodo.json：缺少 Zenodo 存档元数据');
+else {
+  try {
+    const metadata = JSON.parse(readFileSync(zenodoPath, 'utf8'));
+    if (metadata.upload_type !== 'software' || metadata.license !== 'mit' || metadata.access_right !== 'open') violations.push('.zenodo.json：上传类型/许可/访问权限不符合公开软件要求');
+    if (!Array.isArray(metadata.creators) || !metadata.creators.length || !metadata.creators[0].name) violations.push('.zenodo.json：缺少创作者');
+    const hasRepository = Array.isArray(metadata.related_identifiers) && metadata.related_identifiers.some(item => item.identifier === 'https://github.com/lvkoko846/catplot-xrd-workbench' && item.relation === 'isDerivedFrom');
+    if (!hasRepository) violations.push('.zenodo.json：缺少来源仓库 related identifier');
+    if (citationVersion && metadata.version !== citationVersion) violations.push('CITATION.cff 与 .zenodo.json 版本不一致');
+  } catch (error) {
+    violations.push('.zenodo.json：JSON 无效 → ' + error.message);
+  }
+}
+
 for (const f of files) {
   if (/private-disabled/.test(f.rel) || /(^|\/)catplot\.db$/.test(f.rel) || /(^|\/)private\//.test(f.rel)) {
     violations.push(f.rel + '：数据库/受限数据文件出现在公开版发布面');

@@ -867,6 +867,23 @@
     });
   }
 
+  function nativeFields(format, n) {
+    function shown(value, suffix) { return value != null && value !== '' ? String(value) + (suffix || '') : '—'; }
+    var fields = [['格式', window.CatParser.formatName(format)]];
+    if (format === 'jcamp') {
+      fields.push(['标题', n.title || '—'], ['X / Y 单位', (n.xUnits || '—') + ' / ' + (n.yUnits || '—')], ['变量表', n.dataGuide || '—'], ['压缩方式', n.compression || '—'], ['声明点数', shown(n.nPoints)], ['X / Y 因子', shown(n.xFactor) + ' / ' + shown(n.yFactor)], ['X 步长', n.xStep != null ? n.xStep + '（按首末点重建）' : (n.deltaX != null ? n.deltaX + '（文件头）' : '—')]);
+    } else if (format === 'uxd') {
+      fields.push(['样品', n.sample || '—'], ['测量日期', n.dateMeasured || '—'], ['阳极 / λ₁', (n.anode || '—') + ' / ' + shown(n.wavelength, ' Å')], ['步长 / 步时', shown(n.stepSize) + ' / ' + shown(n.stepTime, ' s')], ['管压 / 管流', shown(n.voltage, ' kV') + ' / ' + shown(n.current, ' mA')]);
+    } else if (format === 'xrdml') {
+      fields.push(['样品', n.sample || '—'], ['样品 ID', n.sampleId || '—'], ['X / Y 单位', (n.xUnits || '—') + ' / ' + (n.yUnits || '—')], ['扫描轴 / 导入轴', (n.scanAxis || '—') + ' / ' + (n.selectedAxis || '—')], ['扫描方式', (n.scanMode || '—') + ' / ' + (n.measurementType || '—')], ['扫描选择', n.selectedScan != null && n.scanCount != null ? '第 ' + n.selectedScan + ' / ' + n.scanCount + ' 个' : '—'], ['阳极 / λ₁', (n.anode || '—') + ' / ' + shown(n.wavelength, ' Å')], ['管压 / 管流', shown(n.voltage, ' kV') + ' / ' + shown(n.current, ' mA')], ['开始时间', n.dateMeasured || '—'], ['作者 / 仪器', (n.author || '—') + ' / ' + (n.instrumentId || '—')], ['强度解码', n.intensityMode || '—']);
+    } else if (format === 'ras') {
+      fields.push(['样品', n.sample || '—'], ['标题', n.title || '—'], ['X / Y 单位', (n.xUnits || '—') + ' / ' + (n.yUnits || '—')], ['Y 解码列', n.yColumn || '—'], ['显示强度单位', n.displayedYUnits || '—'], ['扫描轴 / 方式', (n.scanAxis || '—') + ' / ' + (n.scanMode || '—')], ['步长 / 速度', shown(n.stepSize) + ' / ' + shown(n.scanSpeed, n.scanSpeedUnit ? ' ' + n.scanSpeedUnit : '')], ['阳极 / λ₁', (n.anode || '—') + ' / ' + shown(n.wavelength, ' Å')], ['管压 / 管流', shown(n.voltage, ' kV') + ' / ' + shown(n.current, ' mA')], ['开始 / 结束', (n.dateMeasured || '—') + ' / ' + (n.endTime || '—')]);
+    } else if (format === 'spa') {
+      fields.push(['标题', n.title || '—'], ['X / Y 单位', (n.xUnits || '—') + ' / ' + (n.yUnits || '—')], ['声明点数', shown(n.nPoints)], ['X / Y 单位码', n.xUnitCode != null && n.yUnitCode != null ? '0x' + Number(n.xUnitCode).toString(16) + ' / 0x' + Number(n.yUnitCode).toString(16) : '—'], ['载荷方向', n.orientation || '—'], ['采集时间', n.dateMeasured || '—'], ['实验路径', n.experimentPath || '—'], ['拉曼激发', n.laserWavelengthNm != null ? shown(n.laserWavelengthNm, ' nm') : '—'], ['数据头 / 载荷长度', shown(n.dataHeaderLength) + ' / ' + shown(n.payloadBytes) + ' 字节']);
+    }
+    return fields;
+  }
+
   function renderTrace(s) {
     var body = $('smpTraceBody');
     body.innerHTML = '';
@@ -892,19 +909,24 @@
       return;
     }
     line('文件：' + (meta.fileName || '—'));
-    if (meta.format === 'jcamp' || meta.format === 'uxd') {
-      var n = meta.native || {};
-      line('原生格式：' + (meta.format === 'jcamp' ? 'JCAMP-DX' : 'Bruker UXD') + (n.title ? ' · ' + n.title : '') + (n.sample ? ' · ' + n.sample : ''));
+    if (window.CatParser.isNativeFormat(meta.format)) {
+      var n = meta.native || {}, recordTrace = n.trace === 'record';
+      line('原生格式：' + window.CatParser.formatName(meta.format) + (n.title ? ' · ' + n.title : '') + (n.sample ? ' · ' + n.sample : ''));
       if (meta.format === 'jcamp') line('压缩/变量表：' + (n.compression || '—') + ' · ' + (n.dataGuide || '—') + (n.nPoints != null ? ' · NPOINTS=' + n.nPoints : ''));
-      if (meta.format === 'uxd') line('阳极/波长：' + (n.anode || '—') + ' / ' + (n.wavelength != null ? n.wavelength + ' Å' : '—') + (n.dateMeasured ? ' · ' + n.dateMeasured : ''));
+      if (meta.format === 'uxd' || meta.format === 'xrdml' || meta.format === 'ras') line('阳极/波长：' + (n.anode || '—') + ' / ' + (n.wavelength != null ? n.wavelength + ' Å' : '—') + (n.dateMeasured ? ' · ' + n.dateMeasured : ''));
+      if (meta.format === 'xrdml') line('扫描：' + (n.scanAxis || '—') + ' · 导入轴 ' + (n.selectedAxis || '—') + ' · 第 ' + n.selectedScan + ' / ' + n.scanCount + ' 个 · ' + (n.intensityMode || '—'));
+      if (meta.format === 'ras') line('Y 解码：' + (n.yColumn || '—') + ' · 单位 ' + (n.yUnits || '—'));
+      if (meta.format === 'spa') line('单位 / 载荷：' + (n.xUnits || '—') + ' / ' + (n.yUnits || '—') + ' · ' + (n.orientation || '—'));
       (meta.warnings || []).forEach(function (w) { line('　解析提示：' + w); });
-      line('数值行：X 第 1 列 / Y 第 2 列（由原生格式解码）；原始文件行号保留于 raw.sourceLineNos');
+      line(recordTrace
+        ? '数值记录：X 第 1 列 / Y 第 2 列（由原生格式解码）；raw.lineNos 为逻辑记录序号，不伪造物理文本行号'
+        : '数值行：X 第 1 列 / Y 第 2 列（由原生格式解码）；原始文件行号保留于 raw.sourceLineNos');
       line('导入时间：' + (meta.importedAt || '—'));
       line('排序：' + (meta.sortApplied === 'asc' ? '已生成升序独立副本（原始解码顺序保留于 raw）' : '未排序（保持文件解码顺序）'));
       line('重复 X：' + (meta.duplicateMode === 'merge' ? '按 X 平均合并 ' + (meta.merged || []).length + ' 组' : '保留全部重复点'));
-      var nativeSkipped = meta.skippedRows || [];
-      nativeSkipped.slice(0, 20).forEach(function (e) { line('　第 ' + e.lineNo + ' 行：' + e.reason); });
-      if (nativeSkipped.length > 20) line('　……其余 ' + (nativeSkipped.length - 20) + ' 行见项目 JSON');
+      var nativeSkipped = meta.skippedRows || [], skippedLabel = recordTrace ? '记录' : '行';
+      nativeSkipped.slice(0, 20).forEach(function (e) { line('　第 ' + e.lineNo + ' ' + skippedLabel + '：' + e.reason); });
+      if (nativeSkipped.length > 20) line('　……其余 ' + (nativeSkipped.length - 20) + ' ' + skippedLabel + '见项目 JSON');
       return;
     }
     line('分隔符：' + (meta.delimiter === 'ws' ? '空白' : meta.delimiter === '\t' ? '制表符' : meta.delimiter) +
@@ -1333,8 +1355,10 @@
     $('btnPeakCsv').disabled = !n;
     $('btnClearPeaks').disabled = !n;
     var T = window.CatModel.tech(state.technique);
+    var recordTrace = !!(s && s.importMeta && s.importMeta.native && s.importMeta.native.trace === 'record');
+    var traceLabel = recordTrace ? '记录序号' : '文件行号';
     var thead = document.createElement('thead');
-    thead.innerHTML = '<tr><th>#</th><th>' + T.xLabel + '</th><th' + (T.xrd ? '' : ' hidden') + '>d (Å)</th><th>峰高</th><th>突出度</th><th>来源</th><th>文件行号</th><th></th></tr>';
+    thead.innerHTML = '<tr><th>#</th><th>' + T.xLabel + '</th><th' + (T.xrd ? '' : ' hidden') + '>d (Å)</th><th>峰高</th><th>突出度</th><th>来源</th><th>' + traceLabel + '</th><th></th></tr>';
     table.appendChild(thead);
     var tbody = document.createElement('tbody');
     if (!s || !n) {
@@ -1371,7 +1395,7 @@
           td.appendChild(b);
         } else if (ci === 6) {
           td.textContent = String(lineNo);
-          td.title = '工作副本行号追溯（原始文件行号）';
+          td.title = recordTrace ? '工作副本追溯（逻辑记录序号）' : '工作副本追溯（原始文件行号）';
         } else if (ci === 7) {
           var del = document.createElement('button');
           del.className = 'pk-del'; del.type = 'button'; del.textContent = '✕'; del.title = '删除此峰';
@@ -1541,7 +1565,8 @@
     var s = getSelected();
     if (!s || !s.peaks.list.length) { toast('当前样品峰表为空。', 'err'); return; }
     var lam = state.lib.wavelength;
-    var lines = ['样品,序号,2theta(deg),d(angstrom),峰高(扣背景),突出度,来源,文件行号,实验波长(angstrom),峰表状态'];
+    var traceLabel = s.importMeta && s.importMeta.native && s.importMeta.native.trace === 'record' ? '记录序号' : '文件行号';
+    var lines = ['样品,序号,2theta(deg),d(angstrom),峰高(扣背景),突出度,来源,' + traceLabel + ',实验波长(angstrom),峰表状态'];
     var stale = peaksStale(s);
     s.peaks.list.forEach(function (p, i) {
       var d = lam ? AN.dSpacing(p.x, lam) : null;
@@ -1555,7 +1580,7 @@
     });
     var blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     window.CatChart.download(blob, 'CatPlot_峰表_' + s.name.replace(/[^\w\u4e00-\u9fa5-]+/g, '_') + '_' + stamp() + '.csv');
-    toast('峰表 CSV 已导出：' + s.peaks.list.length + ' 峰，含来源、文件行号与波长' + (lam ? '' : '（未确认波长，d 列为空）') + '。', 'ok');
+    toast('峰表 CSV 已导出：' + s.peaks.list.length + ' 峰，含来源、' + traceLabel + '与波长' + (lam ? '' : '（未确认波长，d 列为空）') + '。', 'ok');
   }
   $('btnPeakCsv').addEventListener('click', doPeakCSV);
 
@@ -1900,7 +1925,7 @@
   });
 
   /* ---------- 导入对话框 ---------- */
-  var imp = { queue: [], index: 0, text: '', fileName: '', format: 'table', result: null, ackSig: null };
+  var imp = { queue: [], index: 0, text: '', buffer: null, fileName: '', format: 'table', result: null, ackSig: null };
 
   function delimValue() {
     var v = $('impDelim').value;
@@ -1923,11 +1948,16 @@
     imp.index = 0;
     openImportCurrent();
   }
+  function importPayload() {
+    return imp.format === 'spa' ? imp.buffer : imp.text;
+  }
+
   function openImportCurrent() {
     var f = imp.queue[imp.index];
-    imp.text = f.text;
+    imp.text = f.text || '';
+    imp.buffer = f.buffer || null;
     imp.fileName = f.name;
-    imp.format = window.CatParser.detectFormat(imp.text, f.name);
+    imp.format = window.CatParser.detectFormat(f.buffer || imp.text, f.name);
     imp.ackSig = null;
     $('impFileMeta').textContent = f.name + ' · ' + (f.size / 1024).toFixed(1) + ' KB' +
       (imp.queue.length > 1 ? ' · 文件 ' + (imp.index + 1) + ' / ' + imp.queue.length : '');
@@ -1937,7 +1967,7 @@
     ['impDelim', 'impSkip', 'impX', 'impY'].forEach(function (id) { $(id).disabled = native; });
     ['impDelimField', 'impSkipField', 'impXField', 'impYField'].forEach(function (id) { $(id).hidden = native; });
     $('impDelim').value = 'auto';
-    var d = window.CatParser.detectDelimiter(imp.text);
+    var d = native ? 'auto' : window.CatParser.detectDelimiter(imp.text);
     $('impSkip').value = native ? 0 : window.CatParser.suggestSkip(imp.text, d, 0, 1);
     document.querySelector('input[name="dupMode"][value="keep"]').checked = true;
     document.querySelector('input[name="sortMode"][value="sort"]').checked = true;
@@ -1947,7 +1977,7 @@
   }
   function closeImport() {
     $('importModal').hidden = true;
-    imp.queue = []; imp.index = 0; imp.text = ''; imp.format = 'table'; imp.result = null; imp.ackSig = null;
+    imp.queue = []; imp.index = 0; imp.text = ''; imp.buffer = null; imp.format = 'table'; imp.result = null; imp.ackSig = null;
   }
 
   function fillColumnSelects(maxCols, keep) {
@@ -1972,7 +2002,7 @@
   function updateImportPreview(rebuildCols) {
     var opts = impOpts();
     var parse = imp.format === 'table' ? window.CatParser.analyze : window.CatParser.analyzeNative;
-    var r = imp.format === 'table' ? parse(imp.text, opts) : parse(imp.text, imp.format, opts);
+    var r = imp.format === 'table' ? parse(imp.text, opts) : parse(importPayload(), imp.format, opts);
     imp.result = r;
 
     if (imp.format === 'table' && (rebuildCols || $('impX').options.length !== Math.max(1, r.maxCols))) {
@@ -1983,14 +2013,13 @@
     }
 
     var xCol = opts.xCol, yCol = opts.yCol;
+    var recordTrace = imp.format !== 'table' && r.native && r.native.trace === 'record';
     var nativeBox = $('impNativeMeta');
     nativeBox.hidden = imp.format === 'table';
     if (imp.format !== 'table') {
       nativeBox.innerHTML = '';
       var n = r.native || {}, dl = document.createElement('dl');
-      var fields = [['格式', imp.format === 'jcamp' ? 'JCAMP-DX' : 'Bruker UXD']];
-      if (imp.format === 'jcamp') fields.push(['标题', n.title || '—'], ['X / Y 单位', (n.xUnits || '—') + ' / ' + (n.yUnits || '—')], ['变量表', n.dataGuide || '—'], ['压缩方式', n.compression || '—'], ['声明点数', n.nPoints != null ? n.nPoints : '—'], ['X / Y 因子', (n.xFactor != null ? n.xFactor : '—') + ' / ' + (n.yFactor != null ? n.yFactor : '—')], ['X 步长', n.xStep != null ? n.xStep + '（按首末点重建）' : (n.deltaX != null ? n.deltaX + '（文件头）' : '—')]);
-      else fields.push(['样品', n.sample || '—'], ['测量日期', n.dateMeasured || '—'], ['阳极 / λ₁', (n.anode || '—') + ' / ' + (n.wavelength != null ? n.wavelength + ' Å' : '—')], ['步长 / 步时', (n.stepSize != null ? n.stepSize : '—') + ' / ' + (n.stepTime != null ? n.stepTime + ' s' : '—')], ['管压 / 管流', (n.voltage != null ? n.voltage + ' kV' : '—') + ' / ' + (n.current != null ? n.current + ' mA' : '—')]);
+      var fields = nativeFields(imp.format, n);
       fields.forEach(function (pair) { var dt = document.createElement('dt'), dd = document.createElement('dd'); dt.textContent = pair[0]; dd.textContent = pair[1]; dl.appendChild(dt); dl.appendChild(dd); });
       nativeBox.appendChild(dl);
     }
@@ -2006,7 +2035,7 @@
     table.innerHTML = '';
     var thead = document.createElement('thead');
     var hr = document.createElement('tr');
-    var th0 = document.createElement('th'); th0.textContent = '文件行号'; hr.appendChild(th0);
+    var th0 = document.createElement('th'); th0.textContent = recordTrace ? '记录序号' : '文件行号'; hr.appendChild(th0);
     for (var c = 0; c < r.maxCols; c++) {
       var th = document.createElement('th');
       th.textContent = '列 ' + (c + 1) + (c === xCol ? ' (X)' : c === yCol ? ' (Y)' : '');
@@ -2036,9 +2065,9 @@
     var detected = r.delimiter === 'ws' ? '空白' : r.delimiter === '\t' ? '制表符' : r.delimiter === ',' ? '逗号' : r.delimiter;
     var html = imp.format === 'table'
       ? ('分隔符：<b>' + window.CatChart.esc(detected) + '</b> · 跳过文件头 <b>' + r.skippedHeader + '</b> 行 · 数据行 <b>' + r.dataRows + '</b> · 空行 ' + r.blankRows)
-      : ('原生格式：<b>' + (imp.format === 'jcamp' ? 'JCAMP-DX' : 'Bruker UXD') + '</b> · 解码数据行 <b>' + r.dataRows + '</b> · 行号为原文件物理行');
+      : ('原生格式：<b>' + window.CatParser.formatName(imp.format) + '</b> · 解码数据' + (recordTrace ? '记录' : '行') + ' <b>' + r.dataRows + '</b> · ' + (recordTrace ? '序号为逻辑记录' : '行号为原文件物理行'));
     html += ' · <span class="ok">有效数据点 ' + r.points.length + '</span>';
-    if (r.errors.length) html += ' · <span class="warn">无效行 ' + r.errors.length + '</span>';
+    if (r.errors.length) html += ' · <span class="warn">无效' + (recordTrace ? '记录' : '行') + ' ' + r.errors.length + '</span>';
     if (r.sortApplied === 'asc') html += ' · 将生成升序独立副本（原始顺序保留）';
     if (opts.duplicateMode === 'merge' && r.merged.length) html += ' · 合并重复 X ' + r.merged.length + ' 组';
     sum.innerHTML = html;
@@ -2064,7 +2093,7 @@
       ul.innerHTML = '';
       r.errors.slice(0, 50).forEach(function (e) {
         var li = document.createElement('li');
-        li.textContent = '第 ' + e.lineNo + ' 行：' + e.reason + '　内容：' + e.text;
+        li.textContent = '第 ' + e.lineNo + (recordTrace ? ' 条记录：' : ' 行：') + e.reason + '　内容：' + e.text;
         ul.appendChild(li);
       });
       if (r.errors.length > 50) {
@@ -2157,12 +2186,13 @@
   });
 
   /* ---------- 文件上传 ---------- */
-  var ALLOWED = /\.(csv|txt|tsv|dat|jdx|jcamp|dx|uxd)$/i;
+  var ALLOWED = /\.(csv|txt|tsv|dat|jdx|jcamp|dx|uxd|xrdml|ras|spa)$/i;
   function handleFiles(fileList) {
     var files = Array.prototype.slice.call(fileList);
     var ok = [], rejected = [];
     files.forEach(function (f) {
-      if (!ALLOWED.test(f.name)) { rejected.push(f.name + '（不支持的格式，仅接受 CSV / TXT / TSV / DAT / JCAMP-DX / UXD）'); return; }
+      if (/\.rasx$/i.test(f.name)) { rejected.push(f.name + '（RASX 为 ZIP 容器，暂不支持）'); return; }
+      if (!ALLOWED.test(f.name)) { rejected.push(f.name + '（不支持的格式，仅接受 CSV / TXT / TSV / DAT / JCAMP-DX / UXD / XRDML / RAS / SPA）'); return; }
       if (f.size > MAX_FILE_MB * 1024 * 1024) { rejected.push(f.name + '（超过 ' + MAX_FILE_MB + ' MB 上限）'); return; }
       if (f.size === 0) { rejected.push(f.name + '（文件为空）'); return; }
       ok.push(f);
@@ -2170,6 +2200,7 @@
     if (rejected.length) toast('以下文件未读取：' + rejected.join('；'), 'err');
     if (!ok.length) return;
     Promise.all(ok.map(function (f) {
+      if (/\.spa$/i.test(f.name)) return f.arrayBuffer().then(function (buffer) { return { name: f.name, size: f.size, buffer: buffer }; });
       return f.text().then(function (text) { return { name: f.name, size: f.size, text: text }; });
     })).then(function (loaded) {
       openImportQueue(loaded);

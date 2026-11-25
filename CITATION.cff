@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use CatPlot in your research, please cite the archived software release."
+title: "CatPlot: browser-local multi-technique spectroscopy analysis and plotting workbench"
+type: software
+authors:
+  - name: "lvkoko846"
+repository-code: "https://github.com/lvkoko846/catplot-xrd-workbench"
+url: "https://catplot-xrd-ahzrkmiqf3h.qoder.website"
+license: MIT
+version: 0.1.0
+date-released: 2026-11-25
+keywords:
+  - X-ray diffraction
+  - Raman spectroscopy
+  - X-ray photoelectron spectroscopy
+  - Fourier-transform infrared spectroscopy
+  - peak fitting
+  - browser-local analysis
+  - JCAMP-DX
+  - Bruker UXD

@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -41,7 +42,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Browser end-to-end tests
+      - name: Browser, mobile and visual regression tests
         run: |
           node scripts/preview.mjs > /tmp/catplot-preview.log 2>&1 &
           server_pid=$!
@@ -67,3 +68,4 @@ jobs:
           node tests/browser-techniques.mjs
           node tests/browser-demo-native.mjs
           node scripts/mobile-check.mjs
+          node tests/visual-regression.mjs

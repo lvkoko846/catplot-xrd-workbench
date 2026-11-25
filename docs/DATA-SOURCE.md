@@ -33,6 +33,8 @@
 
 - `BT86_.UXD`：xylib 示例数据，2374 点；与独立提取的 `BT86_xrd.txt` 逐点比对。来源与仪器元数据见 `tests/fixtures/real/PROVENANCE.md`。
 - `MiniDIFDUP.JDX`：readJDX 示例，GPL-3，584 点；覆盖 SQZ/DIF/DIFDUP 与 X/Y 因子。该文件头 `MAXY/MINY` 与解码数据不一致，CatPlot 将其作为元数据冲突告警，不改写解码值；X 坐标在 FIRSTX/LASTX/NPOINTS 完整且点数匹配时按标准端点重建，并报告与 DELTAX 的差异。
+- XRDML / RAS / SPA：由 `tests/vendor-fixtures.mjs` 确定性生成公开合成 fixture，覆盖正常解码、单位/因子、元数据、坏输入与截断；不把真实厂商文件放入仓库。真实 XRDML、RAS、SPA 光谱及 SPA 干涉图仅在系统临时目录做本地兼容性核对，结果与来源见 `tests/fixtures/real/PROVENANCE.md`。
+- RAS 三列文件的第 3 列按正计数因子处理，测量强度为第 2 列 ÷ 第 3 列；两列文件直接取第 2 列。RASX 是 ZIP 容器，暂不支持。SPA 只接收已验证单谱布局，拒绝干涉图、库检索变体、未知单位/布局及截断文件。
 
 ## 计算参数（计算图谱卡）
 pymatgen XRDCalculator：Cu Kα（1.5406 Å）、scaled=True、2θ 10–90°、默认 Lorentz-偏振校正、**无温度因子、无仪器宽化、无择优取向**、symprec=0.1。

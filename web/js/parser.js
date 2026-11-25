@@ -1,4 +1,4 @@
-/* CatPlot 数据解析：CSV/TXT、JCAMP-DX（AFFN/PAC/SQZ/DIF/DUP）与 Bruker UXD。 */
+/* CatPlot 数据解析：表格、JCAMP-DX、Bruker UXD、PANalytical XRDML、Rigaku RAS 与 OMNIC SPA。 */
 (function () {
   'use strict';
 
@@ -186,15 +186,58 @@
     return skip;
   }
 
-  function detectFormat(text, fileName) {
-    if (/^\s*##(?:TITLE|JCAMP-DX|XUNITS|YUNITS|XYPOINTS|XYDATA|DATA\s+TABLE|PEAK\s+TABLE)\s*=/mi.test(text)) return 'jcamp';
-    if (/^\s*_2THETACOUNTS\s*$/mi.test(text)) return 'uxd';
+  var NATIVE_NAMES = {
+    jcamp: 'JCAMP-DX', uxd: 'Bruker UXD', xrdml: 'PANalytical XRDML',
+    ras: 'Rigaku RAS', spa: 'OMNIC/OPUS SPA'
+  };
+  var SPA_SIGNATURE = 'Spectral Data File';
+
+  function formatName(format) {
+    return NATIVE_NAMES[format] || format || '未知格式';
+  }
+
+  function isNativeFormat(format) {
+    return Object.prototype.hasOwnProperty.call(NATIVE_NAMES, format);
+  }
+
+  function isArrayBuffer(data) {
+    return data instanceof ArrayBuffer || Object.prototype.toString.call(data) === '[object ArrayBuffer]';
+  }
+
+  function asBytes(data) {
+    if (isArrayBuffer(data)) return new Uint8Array(data);
+    if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    throw new Error('SPA 解析需要 ArrayBuffer、Uint8Array 或 Buffer');
+  }
+
+  function hasSPASignature(bytes) {
+    if (bytes.length < SPA_SIGNATURE.length) return false;
+    for (var i = 0; i < SPA_SIGNATURE.length; i++) if (bytes[i] !== SPA_SIGNATURE.charCodeAt(i)) return false;
+    return true;
+  }
+
+  function detectFormat(data, fileName) {
+    var binary = isArrayBuffer(data) || ArrayBuffer.isView(data);
+    var bytes = null;
+    if (binary) {
+      bytes = asBytes(data);
+      if (hasSPASignature(bytes)) return 'spa';
+    }
+    var text = binary ? '' : String(data || '');
+    if (!binary && /<(?:[A-Za-z_][\w.-]*:)?xrdMeasurements?\b/i.test(text)) return 'xrdml';
+    if (!binary && /^\s*\*RAS_DATA_START\s*$/mi.test(text)) return 'ras';
+    if (!binary && /^\s*##(?:TITLE|JCAMP-DX|XUNITS|YUNITS|XYPOINTS|XYDATA|DATA\s+TABLE|PEAK\s+TABLE)\s*=/mi.test(text)) return 'jcamp';
+    if (!binary && /^\s*_2THETACOUNTS\s*$/mi.test(text)) return 'uxd';
+    if (/\.spa$/i.test(fileName || '')) return 'spa';
     if (/\.(?:jdx|dx|jcamp)$/i.test(fileName || '')) return 'jcamp';
     if (/\.uxd$/i.test(fileName || '')) return 'uxd';
+    if (/\.xrdml$/i.test(fileName || '')) return 'xrdml';
+    if (/\.ras$/i.test(fileName || '')) return 'ras';
     return 'table';
   }
 
   function numValue(s) {
+    if (s == null || String(s).trim() === '') return null;
     var v = Number(s);
     return isFinite(v) ? v : null;
   }
@@ -450,16 +493,336 @@
     };
   }
 
-  function analyzeNative(text, format, opts) {
+  function xmlLocalName(node) {
+    return String(node.localName || node.nodeName || '').replace(/^.*:/, '');
+  }
+
+  function xmlChildren(node, name) {
+    return Array.prototype.slice.call(node.children || []).filter(function (child) { return xmlLocalName(child) === name; });
+  }
+
+  function xmlChild(node, name) {
+    return xmlChildren(node, name)[0] || null;
+  }
+
+  function xmlDescendant(node, path) {
+    var current = node;
+    for (var i = 0; current && i < path.length; i++) current = xmlChild(current, path[i]);
+    return current;
+  }
+
+  function xmlValue(node, path) {
+    var found = xmlDescendant(node, path);
+    return found ? String(found.textContent || '').trim() : '';
+  }
+
+  function xmlNumber(node, path) {
+    return numValue(xmlValue(node, path));
+  }
+
+  function xmlNumericList(node, label) {
+    var text = String(node.textContent || '').trim();
+    if (!text) throw new Error(label + ' 为空');
+    var tokens = text.split(/[\s,]+/), values = [];
+    for (var i = 0; i < tokens.length; i++) {
+      var value = numValue(tokens[i]);
+      if (value == null) throw new Error(label + ' 第 ' + (i + 1) + ' 个值「' + tokens[i] + '」不是有限数字');
+      values.push(value);
+    }
+    return values;
+  }
+
+  function axisKey(axis) {
+    var key = String(axis || '').toLowerCase().replace(/θ/g, 'theta').replace(/[\s_-]/g, '');
+    return key === 'twotheta' ? '2theta' : key;
+  }
+
+  function parseXRDML(text) {
+    if (typeof text !== 'string') throw new Error('XRDML 解析需要 XML 文本');
+    if (typeof DOMParser === 'undefined') throw new Error('当前环境不提供浏览器 DOMParser，无法解析 XRDML');
+    if (/<!DOCTYPE|<!ENTITY/i.test(text)) throw new Error('XRDML 含 DOCTYPE/ENTITY，已阻止解析');
+    var doc = new DOMParser().parseFromString(text, 'application/xml');
+    var parserErrors = doc.getElementsByTagName('parsererror');
+    if (parserErrors.length) throw new Error('XRDML XML 语法损坏，无法导入');
+    var root = doc.documentElement, rootName = root && xmlLocalName(root);
+    if (!root || (rootName !== 'xrdMeasurements' && rootName !== 'xrdMeasurement')) throw new Error('XRDML 根元素无效，应为 xrdMeasurements 或 xrdMeasurement');
+
+    var measurements = rootName === 'xrdMeasurement' ? [root] : xmlChildren(root, 'xrdMeasurement');
+    var scans = [];
+    measurements.forEach(function (measurement, index) {
+      var scan = xmlChild(measurement, 'scan'), dataPoints = scan && xmlChild(scan, 'dataPoints');
+      if (scan && dataPoints) scans.push({ measurement: measurement, scan: scan, dataPoints: dataPoints, index: index + 1 });
+    });
+    if (!scans.length) throw new Error('XRDML 中未找到含 dataPoints 的扫描');
+    var selected = scans[0], scan = selected.scan, dataPoints = selected.dataPoints;
+    var warnings = [];
+    if (scans.length > 1) warnings.push('XRDML 含 ' + scans.length + ' 个数据扫描，本次仅导入第 ' + selected.index + ' 个扫描');
+
+    var intensityNode = xmlChild(dataPoints, 'intensities');
+    var countsNode = xmlChild(dataPoints, 'counts');
+    var attenuationNode = xmlChild(dataPoints, 'beamAttenuationFactors');
+    var yNode, yValues, intensityMode, yUnits;
+    if (intensityNode) {
+      yNode = xmlChild(intensityNode, 'listIntensities') || xmlChild(intensityNode, 'counts') || intensityNode;
+      yValues = xmlNumericList(yNode, 'XRDML 强度');
+      intensityMode = 'intensities';
+      yUnits = intensityNode.getAttribute('unit') || yNode.getAttribute('unit') || '';
+      if (countsNode) warnings.push('XRDML 同时提供 intensities 与 counts，已优先采用 intensities');
+    } else if (countsNode) {
+      yValues = xmlNumericList(countsNode, 'XRDML counts');
+      intensityMode = 'counts × beamAttenuationFactors';
+      yUnits = countsNode.getAttribute('unit') || '';
+      if (attenuationNode) {
+        var factors = xmlNumericList(attenuationNode, 'XRDML 束衰减因子');
+        if (factors.length !== yValues.length) throw new Error('XRDML 束衰减因子与 counts 长度不一致：' + factors.length + ' / ' + yValues.length);
+        for (var fi = 0; fi < factors.length; fi++) {
+          if (factors[fi] <= 0) throw new Error('XRDML 第 ' + (fi + 1) + ' 个束衰减因子必须为正数');
+          yValues[fi] *= factors[fi];
+          if (!isFinite(yValues[fi])) throw new Error('XRDML 衰减校正后出现非有限强度');
+        }
+      }
+    } else throw new Error('XRDML dataPoints 缺少 intensities 或 counts');
+    if (yValues.length > 5000000) throw new Error('XRDML 单谱超过 5,000,000 点上限');
+
+    function positionKind(node) {
+      var list = xmlChild(node, 'listPositions'), start = xmlChild(node, 'startPosition');
+      var end = xmlChild(node, 'endPosition'), common = xmlChild(node, 'commonPosition');
+      var representations = (list ? 1 : 0) + (common ? 1 : 0) + ((start || end) ? 1 : 0);
+      if (representations !== 1 || !!(start && !end) || !!(end && !start)) {
+        throw new Error('XRDML positions axis="' + node.getAttribute('axis') + '" 的位置表示不明确');
+      }
+      return list ? 'list' : common ? 'common' : 'range';
+    }
+    var positionNodes = xmlChildren(dataPoints, 'positions'), varying = [], commonPositions = [];
+    positionNodes.forEach(function (node) {
+      var kind = positionKind(node), info = { node: node, kind: kind, axis: node.getAttribute('axis') || '', unit: node.getAttribute('unit') || '' };
+      if (kind === 'common') {
+        info.value = numValue(String(node.textContent || '').trim());
+        commonPositions.push({ axis: info.axis, unit: info.unit, value: info.value });
+      } else varying.push(info);
+    });
+    if (!varying.length) throw new Error('XRDML 没有可绘制的变化轴，只有 commonPosition');
+    var chosen = null;
+    if (varying.length === 1) chosen = varying[0];
+    else {
+      var scanAxis = String(scan.getAttribute('scanAxis') || '');
+      var expectedAxis = axisKey(scanAxis.split(/[-+]/)[0]);
+      var matches = varying.filter(function (item) { return expectedAxis && axisKey(item.axis) === expectedAxis; });
+      if (matches.length === 1) chosen = matches[0];
+      else throw new Error('XRDML 含多个变化轴且无法按 scanAxis="' + scanAxis + '" 唯一选择，请拆分扫描');
+    }
+    var xValues;
+    if (chosen.kind === 'list') xValues = xmlNumericList(xmlChild(chosen.node, 'listPositions'), 'XRDML 轴位置');
+    else {
+      var start = xmlNumericList(xmlChild(chosen.node, 'startPosition'), 'XRDML 起始位置')[0];
+      var end = xmlNumericList(xmlChild(chosen.node, 'endPosition'), 'XRDML 终止位置')[0];
+      if (yValues.length === 1 && Math.abs(start - end) > 1e-12 * Math.max(1, Math.abs(start), Math.abs(end))) throw new Error('XRDML 单点扫描的起止位置不一致');
+      xValues = [];
+      for (var xi = 0; xi < yValues.length; xi++) xValues.push(yValues.length === 1 ? start : start + (end - start) * xi / (yValues.length - 1));
+    }
+    if (xValues.length !== yValues.length) throw new Error('XRDML 轴位置与强度长度不一致：' + xValues.length + ' / ' + yValues.length);
+
+    var records = [];
+    for (var i = 0; i < xValues.length; i++) {
+      if (!isFinite(xValues[i])) throw new Error('XRDML 重建 X 后出现非有限坐标');
+      records.push({ cells: [String(xValues[i]), String(yValues[i])], lineNo: i + 1 });
+    }
+    var sample = xmlChild(selected.measurement, 'sample') || (selected.index === 1 ? xmlChild(root, 'sample') : null);
+    var tube = xmlDescendant(selected.measurement, ['incidentBeamPath', 'xRayTube']);
+    var wavelengthNode = xmlChild(selected.measurement, 'usedWavelength');
+    var native = {
+      format: 'xrdml', trace: 'record', namespace: root.namespaceURI || '',
+      sampleId: sample ? xmlValue(sample, ['id']) : '', sample: sample ? xmlValue(sample, ['name']) || xmlValue(sample, ['id']) : '',
+      xUnits: chosen.unit, yUnits: yUnits, scanAxis: scan.getAttribute('scanAxis') || chosen.axis,
+      selectedAxis: chosen.axis, scanMode: scan.getAttribute('mode') || '', measurementType: selected.measurement.getAttribute('measurementType') || '',
+      scanStatus: scan.getAttribute('status') || '', appendNumber: scan.getAttribute('appendNumber') || '',
+      scanCount: scans.length, selectedScan: selected.index, nPoints: records.length,
+      firstX: xValues[0], lastX: xValues[xValues.length - 1], xStep: xValues.length > 1 ? (xValues[xValues.length - 1] - xValues[0]) / (xValues.length - 1) : 0,
+      anode: tube ? xmlValue(tube, ['anodeMaterial']) : '', wavelength: wavelengthNode ? xmlNumber(wavelengthNode, ['kAlpha1']) : null,
+      wavelength2: wavelengthNode ? xmlNumber(wavelengthNode, ['kAlpha2']) : null, wavelengthRatio: wavelengthNode ? xmlNumber(wavelengthNode, ['ratioKAlpha2KAlpha1']) : null,
+      voltage: tube ? xmlNumber(tube, ['tension']) : null, current: tube ? xmlNumber(tube, ['current']) : null,
+      dateMeasured: xmlValue(scan, ['header', 'startTimeStamp']), endTime: xmlValue(scan, ['header', 'endTimeStamp']),
+      author: xmlValue(scan, ['header', 'author', 'name']), instrumentId: xmlValue(scan, ['header', 'source', 'instrumentID']),
+      intensityMode: intensityMode, attenuationApplied: !!(countsNode && attenuationNode && !intensityNode), commonPositions: commonPositions
+    };
+    return { records: records, native: native, warnings: warnings };
+  }
+
+  function parseRAS(text) {
+    if (typeof text !== 'string') throw new Error('RAS 解析需要文本');
+    var lines = splitLines(text), markers = {};
+    ['RAS_DATA_START', 'RAS_HEADER_START', 'RAS_HEADER_END', 'RAS_INT_START', 'RAS_INT_END', 'RAS_DATA_END'].forEach(function (name) {
+      for (var i = 0; i < lines.length; i++) {
+        if (lines[i].trim().toUpperCase() === '*' + name) { markers[name] = i; break; }
+      }
+    });
+    var required = ['RAS_DATA_START', 'RAS_HEADER_START', 'RAS_HEADER_END', 'RAS_INT_START', 'RAS_INT_END', 'RAS_DATA_END'];
+    for (var ri = 0; ri < required.length; ri++) if (markers[required[ri]] == null) throw new Error('RAS 缺少 *' + required[ri] + ' 标记');
+    var order = ['RAS_DATA_START', 'RAS_HEADER_START', 'RAS_HEADER_END', 'RAS_INT_START', 'RAS_INT_END', 'RAS_DATA_END'];
+    for (var oi = 1; oi < order.length; oi++) if (markers[order[oi]] <= markers[order[oi - 1]]) throw new Error('RAS 区段标记顺序无效：*' + order[oi]);
+
+    var meta = {}, warnings = [];
+    for (var hi = markers.RAS_HEADER_START + 1; hi < markers.RAS_HEADER_END; hi++) {
+      var headerLine = lines[hi].trim(), hm = headerLine.match(/^\*([A-Z0-9_-]+)\s+"((?:[^"]|"")*)"\s*$/i);
+      if (hm) meta[hm[1].toUpperCase()] = hm[2].replace(/""/g, '"');
+      else if (headerLine) warnings.push('RAS 文件头第 ' + (hi + 1) + ' 行不是可识别的键值，已忽略');
+    }
+    var dataLines = lines.slice(markers.RAS_INT_START + 1, markers.RAS_INT_END);
+    var hasFactorColumn = dataLines.some(function (line) {
+      return line.trim() !== '' && line.trim().split(/\s+/).length >= 3;
+    });
+    var records = [], blankRows = 0, extraColumns = false;
+    dataLines.forEach(function (line, index) {
+      var sourceLine = markers.RAS_INT_START + index + 2, trim = line.trim();
+      if (!trim) { blankRows++; return; }
+      var cells = trim.split(/\s+/);
+      if (cells.length > (hasFactorColumn ? 3 : 2)) extraColumns = true;
+      var reason = null, y = null;
+      if (cells.length < 2) reason = 'RAS 数据行应包含角度与强度至少两列';
+      else if (hasFactorColumn && cells.length < 3) reason = 'RAS 文件使用第 3 列计数因子，但该行缺少因子';
+      else if (!isNumeric(cells[0])) reason = 'RAS X 值不是有效数字';
+      else if (!isNumeric(cells[1])) reason = 'RAS 显示强度不是有效数字';
+      else if (hasFactorColumn && (!isNumeric(cells[2]) || Number(cells[2]) <= 0)) reason = 'RAS 第 3 列计数因子必须为正数';
+      else y = hasFactorColumn ? Number(cells[1]) / Number(cells[2]) : Number(cells[1]);
+      if (!reason && !isFinite(y)) reason = 'RAS 解码后强度不是有限数值';
+      records.push({ cells: [cells[0], String(y == null ? cells[1] : y)], lineNo: records.length + 1, sourceLine: sourceLine, nativeError: reason });
+    });
+    if (extraColumns) warnings.push('RAS 数据行含额外列；仅使用 X、显示强度' + (hasFactorColumn ? '与第 3 列计数因子' : ''));
+    if (hasFactorColumn) warnings.push('RAS 检测到第 3 列计数因子，已按「测量强度 = 第 2 列显示强度 ÷ 第 3 列」解码');
+    var expected = metaNumber(meta, 'MEAS_DATA_COUNT');
+    if (expected != null && expected !== records.length) warnings.push('MEAS_DATA_COUNT=' + expected + '，实际数据记录 ' + records.length + ' 条');
+    var yColumn = hasFactorColumn ? '第 2 列 ÷ 第 3 列计数因子（测量强度）' : '第 2 列显示强度';
+    return {
+      records: records,
+      native: {
+        format: 'ras', trace: 'line', sample: meta.FILE_SAMPLE || '', title: meta.DISP_NOTE || '', note: meta.FILE_MEMO || '',
+        xUnits: meta.MEAS_SCAN_UNIT_X || '', yUnits: meta.MEAS_SCAN_UNIT_Y || meta.DISP_UNIT_Y || '',
+        displayedYUnits: meta.DISP_UNIT_Y || '', yColumn: yColumn, factorColumn: hasFactorColumn ? 3 : null,
+        anode: meta.HW_XG_TARGET_NAME || '', wavelength: metaNumber(meta, 'HW_XG_WAVE_LENGTH_ALPHA1'),
+        wavelength2: metaNumber(meta, 'HW_XG_WAVE_LENGTH_ALPHA2'), wavelengthBeta: metaNumber(meta, 'HW_XG_WAVE_LENGTH_BETA'),
+        voltage: metaNumber(meta, 'MEAS_COND_XG_VOLTAGE'), current: metaNumber(meta, 'MEAS_COND_XG_CURRENT'),
+        scanAxis: meta.MEAS_SCAN_AXIS_X || '', scanMode: meta.MEAS_SCAN_MODE || '',
+        scanStart: metaNumber(meta, 'MEAS_SCAN_START'), scanStop: metaNumber(meta, 'MEAS_SCAN_STOP'), stepSize: metaNumber(meta, 'MEAS_SCAN_STEP'),
+        scanSpeed: metaNumber(meta, 'MEAS_SCAN_SPEED'), scanSpeedUnit: meta.MEAS_SCAN_SPEED_UNIT || '',
+        dateMeasured: meta.MEAS_SCAN_START_TIME || '', endTime: meta.MEAS_SCAN_END_TIME || '',
+        operator: meta.FILE_OPERATOR || '', nPoints: expected, blankRows: blankRows
+      },
+      warnings: warnings
+    };
+  }
+
+  var WIN_1252 = ['€', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', 'Ž', '', '‘', '’', '“', '”', '•', '–', '—', '˜', '™', 'š', '›', 'œ', 'ž', 'Ÿ'];
+
+  function bytesText(bytes, start, length) {
+    var end = Math.min(bytes.length, start + length), out = '';
+    for (var i = start; i < end; i++) {
+      var b = bytes[i];
+      if (b === 0) break;
+      out += b >= 32 && b < 127 ? String.fromCharCode(b) : b >= 128 ? (WIN_1252[b - 128] || String.fromCharCode(b)) : (b === 9 || b === 10 || b === 13 ? String.fromCharCode(b) : '');
+    }
+    return out.trim();
+  }
+
+  function parseSPA(data) {
+    var bytes = asBytes(data);
+    if (!hasSPASignature(bytes)) throw new Error('SPA 文件签名无效，应为 Spectral Data File');
+    if (bytes.length < 304) throw new Error('SPA 文件头被截断');
+    var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    var keyCount = view.getUint16(294, true), tableEnd = 304 + keyCount * 16;
+    if (!keyCount || tableEnd > bytes.length) throw new Error('SPA 键表数量或长度无效，文件可能被截断');
+    var keys = [];
+    for (var i = 0; i < keyCount; i++) {
+      var offset = 304 + i * 16, key = bytes[offset], subtype = bytes[offset + 1];
+      var position = view.getUint32(offset + 2, true), length = view.getUint32(offset + 6, true);
+      if (length && (position < tableEnd || position > bytes.length || length > bytes.length - position)) throw new Error('SPA 键表第 ' + (i + 1) + ' 条记录指向越界或与文件头重叠的数据块');
+      keys.push({ key: key, subtype: subtype, position: position, length: length });
+    }
+    function singleKey(wanted) {
+      var found = keys.filter(function (entry) { return entry.key === wanted; });
+      if (found.length > 1) throw new Error('SPA 含多个 0x' + wanted.toString(16) + ' 数据块，无法唯一确定光谱');
+      return found[0] || null;
+    }
+    var header = singleKey(0x02), payload = singleKey(0x03);
+    if (!header || !payload) throw new Error('SPA 缺少唯一的数据头 0x02 或主数据块 0x03');
+    if (payload.position < header.position + header.length && header.position < payload.position + payload.length) throw new Error('SPA 数据头与主数据块重叠，无法保证载荷完整');
+    if (keys.some(function (entry) { return entry.key === 0x53; })) throw new Error('SPA 库/检索谱变体尚未验证，未导入以免误判载荷方向');
+    if (header.length < 24) throw new Error('SPA 数据头不足 24 字节，无法读取点数、单位与 X 端点');
+    var count = view.getUint32(header.position + 4, true);
+    if (!count || count > 5000000) throw new Error('SPA 点数无效或超过 5,000,000 点上限');
+    if (payload.length !== count * 4) throw new Error('SPA 数据头声明 ' + count + ' 点，但主数据块为 ' + payload.length + ' 字节，无法保证完整光谱');
+    var xCode = bytes[header.position + 8], yCode = bytes[header.position + 12];
+    if (xCode === 0x02) throw new Error('SPA X 单位为 data points，通常是独立干涉图；当前不将其作为光谱导入');
+    var xUnits = { 1: 'cm⁻¹', 3: 'nm', 4: 'µm', 32: 'cm⁻¹' }[xCode];
+    var yUnits = { 11: 'Reflectance', 12: 'log(1/R)', 15: 'Single beam', 16: '% Transmittance', 17: 'Absorbance', 20: 'Kubelka–Munk', 21: 'Reflectance', 23: 'Transmittance', 26: 'Photoacoustic', 31: 'Raman intensity' }[yCode];
+    if (!xUnits) throw new Error('SPA X 单位码 0x' + xCode.toString(16) + ' 尚未验证，未导入');
+    if (yCode === 0x16) throw new Error('SPA Volts 标签见于独立干涉图，当前不按光谱导入');
+    if (!yUnits) throw new Error('SPA Y 单位码 0x' + yCode.toString(16) + ' 尚未验证，未导入');
+    if ((xCode === 0x20) !== (yCode === 0x1f)) throw new Error('SPA 拉曼位移/拉曼强度单位组合不匹配，未导入');
+    var lastX = view.getFloat32(header.position + 16, true), firstX = view.getFloat32(header.position + 20, true);
+    if (!isFinite(lastX) || !isFinite(firstX)) throw new Error('SPA X 端点不是有限数值');
+    if (count > 1 && lastX === firstX) throw new Error('SPA 多点光谱的 X 起止端点相同');
+    if (count === 1 && lastX !== firstX) throw new Error('SPA 单点光谱的 X 起止端点不一致');
+
+    var yValues = [], records = [], warnings = [];
+    if ([3, 4, 11, 12, 15, 20, 21, 23, 26].indexOf(xCode) !== -1 || [11, 12, 15, 20, 21, 23, 26].indexOf(yCode) !== -1) warnings.push('SPA 使用共享文件头已观察、但尚未覆盖全部厂商变体的单位码；坐标与载荷按已验证端点规则解码');
+    if (header.length !== 140) warnings.push('SPA 数据头长度为 ' + header.length + ' 字节；仅使用已验证的前 24 字节字段');
+    for (var pi = 0; pi < count; pi++) {
+      var y = view.getFloat32(payload.position + pi * 4, true);
+      if (!isFinite(y)) throw new Error('SPA 第 ' + (pi + 1) + ' 个强度不是有限数值');
+      var x = count === 1 ? lastX : lastX + (firstX - lastX) * pi / (count - 1);
+      if (!isFinite(x)) throw new Error('SPA 第 ' + (pi + 1) + ' 个重建坐标不是有限数值');
+      yValues.push(y);
+      records.push({ cells: [String(x), String(y)], lineNo: pi + 1 });
+    }
+    var comments = keys.filter(function (entry) { return entry.key === 0x04; }).map(function (entry) { return bytesText(bytes, entry.position, entry.length); }).filter(Boolean);
+    var comment = comments.join('\n');
+    if (comment.length > 4000) { comment = comment.slice(0, 4000); warnings.push('SPA 注释超过 4000 字符，元数据中仅保留前 4000 字符'); }
+    var experiments = keys.filter(function (entry) { return entry.key === 0x82 && entry.subtype === 0x79; });
+    if (experiments.length > 1) warnings.push('SPA 含多个 0x82/0x79 实验信息块，元数据采用第一个');
+    var experiment = experiments[0], experimentPath = '', experimentTitle = '', description = '', accessory = '';
+    if (experiment) {
+      if (experiment.length > 10) experimentPath = bytesText(bytes, experiment.position + 10, Math.min(80, experiment.length - 10));
+      if (experiment.length > 90) experimentTitle = bytesText(bytes, experiment.position + 90, Math.min(64, experiment.length - 90));
+      if (experiment.length > 154) description = bytesText(bytes, experiment.position + 154, Math.min(259, experiment.length - 154));
+      if (experiment.length > 413) accessory = bytesText(bytes, experiment.position + 413, Math.min(257, experiment.length - 413));
+    }
+    var rawTimestamp = view.getUint32(296, true), dateMeasured = '';
+    if (rawTimestamp) {
+      var timestamp = new Date(-2209075200000 + rawTimestamp * 1000);
+      if (!isNaN(timestamp.getTime())) dateMeasured = timestamp.toISOString();
+    }
+    var laserWavenumber = xCode === 0x20 && header.length >= 100 ? view.getFloat32(header.position + 96, true) : null;
+    if (laserWavenumber != null && (!isFinite(laserWavenumber) || laserWavenumber <= 0)) laserWavenumber = null;
+    var native = {
+      format: 'spa', trace: 'record', title: experimentTitle || bytesText(bytes, 30, 256), sample: '',
+      experimentPath: experimentPath, description: description, accessory: accessory, comment: comment,
+      xUnits: xUnits, yUnits: yUnits, xUnitCode: xCode, yUnitCode: yCode,
+      firstX: firstX, lastX: lastX, storedFirstX: lastX, storedLastX: firstX,
+      orientation: 'payload[0] = Last X；payload[N-1] = First X', nPoints: count,
+      dateMeasured: dateMeasured, timestampEncoding: 'uint32 seconds since 1899-12-31 UTC',
+      laserWavenumber: laserWavenumber, laserWavelengthNm: laserWavenumber ? 1e7 / laserWavenumber : null,
+      keyCount: keyCount, dataHeaderLength: header.length, payloadOffset: payload.position, payloadBytes: payload.length,
+      textEncoding: 'Windows-1252（单字节元数据）'
+    };
+    return { records: records, native: native, warnings: warnings };
+  }
+
+  function analyzeNative(data, format, opts) {
     var parsed;
     try {
-      parsed = format === 'jcamp' ? parseJCAMP(text) : parseUXD(text);
+      if (format === 'jcamp') parsed = parseJCAMP(data);
+      else if (format === 'uxd') parsed = parseUXD(data);
+      else if (format === 'xrdml') parsed = parseXRDML(data);
+      else if (format === 'ras') parsed = parseRAS(data);
+      else if (format === 'spa') parsed = parseSPA(data);
+      else throw new Error('不支持的原生格式：' + format);
     } catch (e) {
       var failed = baseResult({ sourceFormat: format, fatal: e.message });
       return failed;
     }
     var result = finishRecords(parsed.records, Object.assign({}, opts, { xCol: 0, yCol: 1 }), {
-      sourceFormat: format, logicalLines: true, native: parsed.native, warnings: parsed.warnings
+      sourceFormat: format, logicalLines: true, native: parsed.native, warnings: parsed.warnings,
+      blankRows: parsed.native.blankRows || 0
     });
     return result;
   }
@@ -471,6 +834,8 @@
     suggestSkip: suggestSkip,
     isNumeric: isNumeric,
     detectFormat: detectFormat,
+    formatName: formatName,
+    isNativeFormat: isNativeFormat,
     analyzeNative: analyzeNative
   };
 })();

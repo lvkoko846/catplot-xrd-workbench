@@ -2,9 +2,10 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import vm from 'node:vm';
+import { XRDML_LIST, XRDML_RANGE, XRDML_COMMON_ONLY, XRDML_BAD_LENGTH, XRDML_BAD_XML, XRDML_ENTITY, RAS_TEXT, RAS_TWO_COLUMN, makeSPA } from './vendor-fixtures.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const sandbox = { window: {}, console, Map, Set, Math, Number, String, Array, Object, JSON, isFinite, Infinity, NaN, Date, RegExp };
+const sandbox = { window: {}, console, Map, Set, Math, Number, String, Array, Object, JSON, isFinite, Infinity, NaN, Date, RegExp, ArrayBuffer, DataView, Uint8Array };
 vm.createContext(sandbox);
 for (const file of ['js/model.js', 'js/parser.js']) vm.runInContext(readFileSync(join(ROOT, 'web', file), 'utf8'), sandbox, { filename: file });
 const M = sandbox.window.CatModel, P = sandbox.window.CatParser;
@@ -24,6 +25,21 @@ function closeArray(a, b, tolerance = 1e-9) {
 }
 function header(extra = '') {
   return '##TITLE=Native fixture\n##JCAMP-DX=5.00\n##XUNITS=2theta (deg)\n##YUNITS=Intensity\n' + extra;
+}
+function nativeProject(result, format) {
+  const layer = points => {
+    const out = { x: points.map(p => p.x), y: points.map(p => p.y), lineNos: points.map(p => p.lineNo) };
+    if (points.every(p => p.sourceLine != null)) out.sourceLineNos = points.map(p => p.sourceLine);
+    return out;
+  };
+  const sample = {
+    id: 's1', name: 'Native ' + format, color: '#2563eb', lineWidth: 1.5, visible: true, offset: 0, normalize: false, source: 'file', note: '',
+    raw: layer(result.rawPoints), working: layer(result.points),
+    importMeta: { format, skippedRows: result.errors, merged: result.merged, duplicateMode: 'keep', sortMode: 'sort', sortApplied: result.sortApplied, xCol: 0, yCol: 1, native: result.native, warnings: result.warnings },
+    bg: M.defaultBg(), peaks: M.defaultPeaks(), charge: M.defaultCharge()
+  };
+  const settings = { title: 'Native', xMin: null, xMax: null, yMin: null, yMax: null, showLegend: true, showGrid: true, stack: true, stackGap: 1.15, stackScale: 0.8 };
+  return M.serializeProject({ samples: [sample], settings, refs: [], lib: { wavelength: null, sticksOn: false }, history: [], phases: [], fit: null, technique: 'xrd' });
 }
 
 console.log('\n== 原生格式真值与边界 ==');
@@ -222,6 +238,145 @@ t('N14 真实 MiniDIFDUP：584 点、压缩解码、因子缩放、X 重建与�
   ok(!r.warnings.some(w => /^(FIRSTX|LASTX|FIRSTY)=/.test(w)), '已按标准元数据重建的首末与首值不应误报');
   eq(r.rawPoints[0].sourceLine, 17);
   eq(r.rawPoints.map(p => p.lineNo), Array.from({ length: 584 }, (_, i) => i + 1));
+});
+
+t('N15 XRDML / RAS / SPA 检测：内容优先、扩展名兜底、RASX 不误报', () => {
+  eq(P.detectFormat(XRDML_LIST, 'unknown.bin'), 'xrdml');
+  eq(P.detectFormat(RAS_TEXT, 'unknown.bin'), 'ras');
+  eq(P.detectFormat(makeSPA(), 'renamed.txt'), 'spa');
+  eq(P.detectFormat(makeSPA().buffer, 'renamed.dat'), 'spa');
+  eq(P.detectFormat('', 'a.XRDML'), 'xrdml');
+  eq(P.detectFormat('', 'a.RAS'), 'ras');
+  eq(P.detectFormat('', 'a.SPA'), 'spa');
+  eq(P.detectFormat('', 'a.rasx'), 'table');
+  eq(P.isNativeFormat('rasx'), false);
+  eq(P.formatName('xrdml'), 'PANalytical XRDML');
+  eq(P.formatName('ras'), 'Rigaku RAS');
+  eq(P.formatName('spa'), 'OMNIC/OPUS SPA');
+});
+
+t('N16 Rigaku RAS：第三列计数因子解码、物理行保留、坏行显式记录', () => {
+  const r = P.analyzeNative(RAS_TEXT, 'ras', opts);
+  ok(!r.fatal, r.fatal);
+  eq(r.dataRows, 5);
+  eq(r.rawPoints.map(p => p.x), [10, 11, 13]);
+  eq(r.rawPoints.map(p => p.y), [50, 30, 80]);
+  eq(r.rawPoints.map(p => p.lineNo), [1, 2, 5]);
+  eq(r.rawPoints.map(p => p.sourceLine), [26, 27, 30]);
+  eq(r.errors.length, 2);
+  eq(r.errors.map(e => e.lineNo), [28, 29]);
+  eq(r.native.sample, 'Synthetic RAS');
+  eq(r.native.anode, 'Cu');
+  eq(r.native.wavelength, 1.540593);
+  eq(r.native.voltage, 40);
+  eq(r.native.current, 44);
+  eq(r.native.factorColumn, 3);
+  ok(r.native.yColumn.includes('第 2 列 ÷ 第 3 列'));
+  ok(r.warnings.some(w => w.includes('测量强度')));
+  const v = M.validateProject(JSON.parse(JSON.stringify(nativeProject(r, 'ras'))));
+  ok(v.ok, v.errors.join('；'));
+});
+
+t('N17 RAS 两列文件保持显示强度；声明点数冲突告警', () => {
+  const r = P.analyzeNative(RAS_TWO_COLUMN, 'ras', opts);
+  ok(!r.fatal, r.fatal);
+  eq(r.rawPoints.map(p => p.y), [100, 120, 90, 80, 70]);
+  eq(r.native.factorColumn, null);
+  eq(r.native.yUnits, 'counts');
+  const mismatch = P.analyzeNative(RAS_TWO_COLUMN.replace('*MEAS_DATA_COUNT "5"', '*MEAS_DATA_COUNT "9"'), 'ras', opts);
+  ok(mismatch.warnings.some(w => w.includes('MEAS_DATA_COUNT=9')));
+});
+
+t('N18 RAS 损坏区段与全坏数据明确失败', () => {
+  for (const text of [RAS_TEXT.replace('*RAS_INT_END\n', ''), RAS_TEXT.replace('10 100 2\n11 120 4\n12 0 0\nbroken\n13 80 1', 'broken\nalso broken')]) {
+    const r = P.analyzeNative(text, 'ras', opts);
+    ok(r.fatal);
+    eq(r.points.length, 0);
+  }
+});
+
+t('N19 SPA 合成真值：键表、float32、Last X→First X、元数据与排序副本', () => {
+  const timestamp = Math.floor(Date.UTC(2020, 0, 2, 3, 4, 5) / 1000) + 2209075200;
+  const bytes = makeSPA({ timestamp, title: 'Fixture experiment', experimentPath: 'C:\\lab\\sample.spa', description: 'Synthetic known answer' });
+  const r = P.analyzeNative(bytes, 'spa', { duplicateMode: 'keep', sortMode: 'keep' });
+  ok(!r.fatal, r.fatal);
+  eq(r.rawPoints.length, 4);
+  eq(r.rawPoints.map(p => p.x), [100, 200, 300, 400]);
+  eq(r.rawPoints.map(p => p.y), [1, 2, 3, 4]);
+  eq(r.rawPoints.map(p => p.lineNo), [1, 2, 3, 4]);
+  ok(r.rawPoints.every(p => p.sourceLine == null), '二进制记录不得伪造物理行号');
+  eq(r.native.xUnits, 'cm⁻¹');
+  eq(r.native.yUnits, 'Absorbance');
+  eq(r.native.title, 'Fixture experiment');
+  eq(r.native.experimentPath, 'C:\\lab\\sample.spa');
+  eq(r.native.description, 'Synthetic known answer');
+  eq(r.native.dateMeasured, '2020-01-02T03:04:05.000Z');
+  eq(r.native.firstX, 400);
+  eq(r.native.lastX, 100);
+  eq(r.native.storedFirstX, 100);
+  eq(r.native.payloadBytes, 16);
+  const sorted = P.analyzeNative(bytes, 'spa', opts);
+  eq(sorted.rawPoints.map(p => p.x), [100, 200, 300, 400]);
+  eq(sorted.points.map(p => p.x), [100, 200, 300, 400]);
+  eq(sorted.points.map(p => p.y), [1, 2, 3, 4]);
+  eq(sorted.sortApplied, 'none');
+  const descending = P.analyzeNative(makeSPA({ firstX: 100, lastX: 400, values: [4, 3, 2, 1] }), 'spa', opts);
+  eq(descending.rawPoints.map(p => p.x), [400, 300, 200, 100]);
+  eq(descending.points.map(p => p.x), [100, 200, 300, 400]);
+  eq(descending.points.map(p => p.y), [1, 2, 3, 4]);
+  eq(descending.sortApplied, 'asc');
+  const v = M.validateProject(JSON.parse(JSON.stringify(nativeProject(descending, 'spa'))));
+  ok(v.ok, v.errors.join('；'));
+});
+
+t('N20 SPA 拉曼与波长单位：仅接受已验证组合并保留激光元数据', () => {
+  const raman = P.analyzeNative(makeSPA({ xUnit: 0x20, yUnit: 0x1f, firstX: 4000, lastX: 1000, laserWavenumber: 15798 }), 'spa', opts);
+  ok(!raman.fatal, raman.fatal);
+  eq(raman.native.xUnits, 'cm⁻¹');
+  eq(raman.native.yUnits, 'Raman intensity');
+  ok(Math.abs(raman.native.laserWavelengthNm - 632.9915) < 0.001);
+  const wavelength = P.analyzeNative(makeSPA({ xUnit: 0x03, yUnit: 0x11, firstX: 400, lastX: 100 }), 'spa', opts);
+  ok(!wavelength.fatal, wavelength.fatal);
+  eq(wavelength.native.xUnits, 'nm');
+  ok(wavelength.warnings.some(w => w.includes('尚未覆盖全部厂商变体')));
+});
+
+t('N21 SPA 截断、越界、非有限值、干涉图与未验证变体全部显式拒绝', () => {
+  const wrong = makeSPA(); wrong[0] = 88;
+  const badTable = makeSPA(); new DataView(badTable.buffer).setUint16(294, 65535, true);
+  const cases = [
+    ['签名', wrong], ['文件头截断', makeSPA().slice(0, 303)], ['键表截断', badTable],
+    ['缺少数据头', makeSPA({ omitHeader: true })], ['缺少载荷', makeSPA({ omitPayload: true })],
+    ['重复数据头', makeSPA({ duplicateHeader: true })], ['重复载荷', makeSPA({ duplicatePayload: true })],
+    ['点数不一致', makeSPA({ count: 5 })], ['载荷多余字节', makeSPA({ payloadExtra: 4 })],
+    ['非有限强度', makeSPA({ values: [1, NaN, 3, 4] })], ['非有限端点', makeSPA({ firstX: NaN })],
+    ['独立干涉图', makeSPA({ xUnit: 0x02, yUnit: 0x16 })], ['Volts 标签', makeSPA({ yUnit: 0x16 })],
+    ['未知 X 单位', makeSPA({ xUnit: 0x63 })], ['未知 Y 单位', makeSPA({ yUnit: 0x63 })],
+    ['拉曼组合不匹配', makeSPA({ xUnit: 0x20, yUnit: 0x11 })], ['库检索变体', makeSPA({ library: true })],
+    ['数据头过短', makeSPA({ headerLength: 20 })], ['块指针越界', makeSPA({ badPointer: true })],
+    ['数据头与载荷重叠', makeSPA({ overlapPayload: true })]
+  ];
+  for (const [name, bytes] of cases) {
+    const r = P.analyzeNative(bytes, 'spa', opts);
+    ok(r.fatal, name + ' 应明确失败');
+    eq(r.points.length, 0, name + ' 不得产出部分谱');
+  }
+});
+
+t('N22 Node 无 DOMParser 时 XRDML 明确失败，不降级为表格或部分谱', () => {
+  const r = P.analyzeNative(XRDML_LIST, 'xrdml', opts);
+  ok(r.fatal && r.fatal.includes('DOMParser'));
+  eq(r.points.length, 0);
+});
+
+t('N23 XRDML 已知答案文本可供浏览器 DOMParser 验收且覆盖三类位置', () => {
+  ok(XRDML_LIST.includes('<listPositions>10 11 12 13</listPositions>'));
+  ok(XRDML_RANGE.includes('<xrd:startPosition>20</xrd:startPosition>'));
+  ok(XRDML_LIST.includes('<commonPosition>0.25</commonPosition>'));
+  ok(XRDML_BAD_LENGTH.includes('20 40 60</counts>'));
+  ok(XRDML_COMMON_ONLY.includes('<commonPosition>10</commonPosition>'));
+  ok(XRDML_BAD_XML.includes('<xrdMeasurement>'));
+  ok(XRDML_ENTITY.includes('<!ENTITY'));
 });
 
 console.log(`\n== 结果汇总 ==\n通过 ${pass} / ${pass + fail}`);

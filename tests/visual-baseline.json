@@ -1,0 +1,373 @@
+{
+  "schema": "catplot-visual-baseline/v1",
+  "scenarios": {
+    "desktop-main": {
+      "viewport": [
+        1440,
+        960
+      ],
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "layout": {
+        "topbar": {
+          "x": 0,
+          "y": 0,
+          "width": 1440,
+          "height": 96.84
+        },
+        "workbench": {
+          "x": 0,
+          "y": 96.84,
+          "width": 1440,
+          "height": 863.16
+        },
+        "samples": {
+          "x": 14,
+          "y": 108.84,
+          "width": 264,
+          "height": 839.16
+        },
+        "chartPanel": {
+          "x": 290,
+          "y": 108.84,
+          "width": 812,
+          "height": 839.16
+        },
+        "settings": {
+          "x": 1114,
+          "y": 108.84,
+          "width": 312,
+          "height": 839.16
+        },
+        "chart": {
+          "x": 291,
+          "y": 141.84,
+          "width": 810,
+          "height": 538.16
+        }
+      },
+      "chart": {
+        "viewBox": "0 0 960 656",
+        "ariaLabel": "XRD 谱图",
+        "paths": [
+          {
+            "stroke": "#2563eb",
+            "width": "1.8",
+            "hash": "1f9a5890c3f28cd0c424"
+          },
+          {
+            "stroke": "#e11d48",
+            "width": "1.8",
+            "hash": "7d251f84f813507e546c"
+          },
+          {
+            "stroke": "#059669",
+            "width": "1.8",
+            "hash": "92b9d224f867d03d0021"
+          }
+        ],
+        "labels": [
+          "XRD 图谱对比",
+          "10",
+          "20",
+          "30",
+          "40",
+          "50",
+          "60",
+          "70",
+          "80",
+          "2θ (°)",
+          "Intensity (a.u.)",
+          "模拟 A · 锐钛矿…",
+          "模拟 B · 高温煅烧",
+          "模拟 C · 掺杂改性",
+          "含模拟数据 · 纵向堆叠(仅显示) · 强度轴无刻度",
+          "CatPlot"
+        ]
+      },
+      "overlay": null
+    },
+    "mobile-main": {
+      "viewport": [
+        390,
+        844
+      ],
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "layout": {
+        "topbar": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 304.84
+        },
+        "workbench": {
+          "x": 0,
+          "y": 304.84,
+          "width": 390,
+          "height": 2611.34
+        },
+        "samples": {
+          "x": 14,
+          "y": 1106.84,
+          "width": 362,
+          "height": 434.31
+        },
+        "chartPanel": {
+          "x": 14,
+          "y": 316.84,
+          "width": 362,
+          "height": 778
+        },
+        "settings": {
+          "x": 14,
+          "y": 1553.16,
+          "width": 362,
+          "height": 1351.03
+        },
+        "chart": {
+          "x": 15,
+          "y": 349.84,
+          "width": 360,
+          "height": 398
+        }
+      },
+      "chart": {
+        "viewBox": "0 0 960 1061",
+        "ariaLabel": "XRD 谱图",
+        "paths": [
+          {
+            "stroke": "#2563eb",
+            "width": "1.8",
+            "hash": "48b24dd9e6cbae7baf35"
+          },
+          {
+            "stroke": "#e11d48",
+            "width": "1.8",
+            "hash": "293e48ce809d08272678"
+          },
+          {
+            "stroke": "#059669",
+            "width": "1.8",
+            "hash": "411c4853c7402680523d"
+          }
+        ],
+        "labels": [
+          "XRD 图谱对比",
+          "10",
+          "20",
+          "30",
+          "40",
+          "50",
+          "60",
+          "70",
+          "80",
+          "2θ (°)",
+          "Intensity (a.u.)",
+          "模拟 A · 锐钛矿…",
+          "模拟 B · 高温煅烧",
+          "模拟 C · 掺杂改性",
+          "含模拟数据 · 纵向堆叠(仅显示) · 强度轴无刻度",
+          "CatPlot"
+        ]
+      },
+      "overlay": null
+    },
+    "mobile-drawer": {
+      "viewport": [
+        390,
+        844
+      ],
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "layout": {
+        "topbar": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 304.84
+        },
+        "workbench": {
+          "x": 0,
+          "y": 304.84,
+          "width": 390,
+          "height": 2611.34
+        },
+        "samples": {
+          "x": 14,
+          "y": 1106.84,
+          "width": 362,
+          "height": 434.31
+        },
+        "chartPanel": {
+          "x": 14,
+          "y": 316.84,
+          "width": 362,
+          "height": 778
+        },
+        "settings": {
+          "x": 14,
+          "y": 1553.16,
+          "width": 362,
+          "height": 1351.03
+        },
+        "chart": {
+          "x": 15,
+          "y": 349.84,
+          "width": 360,
+          "height": 398
+        }
+      },
+      "chart": {
+        "viewBox": "0 0 960 1061",
+        "ariaLabel": "XRD 谱图",
+        "paths": [
+          {
+            "stroke": "#2563eb",
+            "width": "1.8",
+            "hash": "48b24dd9e6cbae7baf35"
+          },
+          {
+            "stroke": "#e11d48",
+            "width": "1.8",
+            "hash": "293e48ce809d08272678"
+          },
+          {
+            "stroke": "#059669",
+            "width": "1.8",
+            "hash": "411c4853c7402680523d"
+          }
+        ],
+        "labels": [
+          "XRD 图谱对比",
+          "10",
+          "20",
+          "30",
+          "40",
+          "50",
+          "60",
+          "70",
+          "80",
+          "2θ (°)",
+          "Intensity (a.u.)",
+          "模拟 A · 锐钛矿…",
+          "模拟 B · 高温煅烧",
+          "模拟 C · 掺杂改性",
+          "含模拟数据 · 纵向堆叠(仅显示) · 强度轴无刻度",
+          "CatPlot"
+        ]
+      },
+      "overlay": {
+        "box": {
+          "x": 20,
+          "y": 0,
+          "width": 390,
+          "height": 844
+        },
+        "hidden": false,
+        "heading": "示例参考卡",
+        "cards": 3,
+        "tabs": 0,
+        "overflow": false
+      }
+    },
+    "mobile-demo": {
+      "viewport": [
+        390,
+        844
+      ],
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "layout": {
+        "topbar": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 304.84
+        },
+        "workbench": {
+          "x": 0,
+          "y": 304.84,
+          "width": 390,
+          "height": 2611.34
+        },
+        "samples": {
+          "x": 14,
+          "y": 1106.84,
+          "width": 362,
+          "height": 434.31
+        },
+        "chartPanel": {
+          "x": 14,
+          "y": 316.84,
+          "width": 362,
+          "height": 778
+        },
+        "settings": {
+          "x": 14,
+          "y": 1553.16,
+          "width": 362,
+          "height": 1351.03
+        },
+        "chart": {
+          "x": 15,
+          "y": 349.84,
+          "width": 360,
+          "height": 398
+        }
+      },
+      "chart": {
+        "viewBox": "0 0 960 1061",
+        "ariaLabel": "XRD 谱图",
+        "paths": [
+          {
+            "stroke": "#2563eb",
+            "width": "1.8",
+            "hash": "48b24dd9e6cbae7baf35"
+          },
+          {
+            "stroke": "#e11d48",
+            "width": "1.8",
+            "hash": "293e48ce809d08272678"
+          },
+          {
+            "stroke": "#059669",
+            "width": "1.8",
+            "hash": "411c4853c7402680523d"
+          }
+        ],
+        "labels": [
+          "XRD 图谱对比",
+          "10",
+          "20",
+          "30",
+          "40",
+          "50",
+          "60",
+          "70",
+          "80",
+          "2θ (°)",
+          "Intensity (a.u.)",
+          "模拟 A · 锐钛矿…",
+          "模拟 B · 高温煅烧",
+          "模拟 C · 掺杂改性",
+          "含模拟数据 · 纵向堆叠(仅显示) · 强度轴无刻度",
+          "CatPlot"
+        ]
+      },
+      "overlay": {
+        "box": {
+          "x": 16,
+          "y": 116.37,
+          "width": 358,
+          "height": 623.08
+        },
+        "hidden": false,
+        "heading": "一键演示数据",
+        "cards": 2,
+        "tabs": 4,
+        "overflow": false
+      }
+    }
+  }
+}
